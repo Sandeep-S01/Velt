@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: smartsearch_postgres
+    environment:
+      POSTGRES_USER: smartsearch
+      POSTGRES_PASSWORD: smartsearch_pass
+      POSTGRES_DB: smartsearch
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartsearch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7
+    container_name: smartsearch_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ChromaDB for vector storage
+  chromadb:
+    image: chromadb/chroma:0.4.18
+    container_name: smartsearch_chromadb
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chromadb_data:/chroma/chroma
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for file storage (S3-compatible)
+  minio:
+    image: minio/minio
+    container_name: smartsearch_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  chromadb_data:
+  minio_data:

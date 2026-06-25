@@ -1,0 +1,74 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python Virtual Environments & Packages
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+pip-log.txt
+
+# Local configuration / Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.settings/
+
+# Databases & local storage
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+app/chroma_db/
+smartsearch-api/app/chroma_db/
+smartsearch-api/chroma_db/
+db.sqlite3
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Models & Downloads
+huggingface/
+.cache/
+sentence-transformers/

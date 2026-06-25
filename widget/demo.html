@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boutique Jewels — Storefront Sandbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --charcoal: #0F172A;
+      --slate: #475569;
+      --gold: #D97706;
+      --bg: #F8FAFC;
+    }
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg);
+      color: var(--charcoal);
+    }
+    header {
+      background-color: white;
+      border-bottom: 1px solid #E2E8F0;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--charcoal);
+    }
+    nav a {
+      text-decoration: none;
+      color: var(--slate);
+      font-size: 14px;
+      font-weight: 600;
+      margin-left: 24px;
+      transition: color 0.15s;
+    }
+    nav a:hover {
+      color: var(--primary);
+    }
+    .hero {
+      background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+      padding: 80px 32px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 48px;
+      margin: 0 0 16px 0;
+      color: var(--charcoal);
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--slate);
+      max-width: 600px;
+      margin: 0 auto 32px auto;
+      line-height: 1.6;
+    }
+    .hero-btn {
+      display: inline-block;
+      padding: 12px 32px;
+      background-color: var(--charcoal);
+      color: white;
+      text-decoration: none;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 15px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .hero-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+    }
+    .sandbox-guide {
+      max-width: 800px;
+      margin: 48px auto;
+      background: white;
+      padding: 32px;
+      border-radius: 20px;
+      border: 1px solid #E2E8F0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .sandbox-guide h3 {
+      margin-top: 0;
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .sandbox-guide p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--slate);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background-color: #E0E7FF;
+      color: var(--primary);
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    footer {
+      background-color: white;
+      border-top: 1px solid #E2E8F0;
+      padding: 32px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--slate);
+    }
+    .hotkey-tag {
+      background-color: #E2E8F0;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--charcoal);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">Boutique Jewels</div>
+    <nav>
+      <a href="#">Necklaces</a>
+      <a href="#">Rings</a>
+      <a href="#">Earrings</a>
+      <a href="#">New Arrivals</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <span class="badge">Storefront Demo sandbox</span>
+    <h1>Elevate Your Search</h1>
+    <p>
+      This storefront mimics a live merchant site. SmartSearch's widget is active below. Click the floating search icon or press hotkeys to find products semantically.
+    </p>
+    <a href="#" class="hero-btn" onclick="if(window.ssWidgetInstance) window.ssWidgetInstance.openSearch(); return false;">
+      Explore Collection
+    </a>
+  </section>
+
+  <div class="sandbox-guide">
+    <h3>🔍 How to Test AI Search</h3>
+    <p>
+      1. Click the floating search trigger in the bottom-right corner or press <span class="hotkey-tag">Ctrl + K</span> (or <span class="hotkey-tag">Cmd + K</span>).<br>
+      2. Type a natural language query, such as <strong>"something gold for a wedding"</strong> or <strong>"noise canceling ears"</strong>.<br>
+      3. Check out the matched suggestions dropdown and click on a search result card.<br>
+      4. Note: To see items, first upload your product feed (e.g. CSV) via the **Merchant Console** and copy your **Store ID** into this sandbox page URL query string (e.g. <code>?store_id=your-store-id</code>).
+    </p>
+  </div>
+
+  <footer>
+    &copy; 2026 Boutique Jewels. Designed for SmartSearch QA Verification.
+  </footer>
+
+  <!-- SmartSearch Embedded JS Widget Ingestion -->
+  <script src="./widget.js" id="ss-widget-script"></script>
+  <script>
+    // Extract Store ID from URL parameter, fallback to a mock store ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeId = urlParams.get('store_id') || 'mock_store_id';
+    
+    // Configure script tags parameters
+    const scriptTag = document.getElementById('ss-widget-script');
+    scriptTag.setAttribute('data-store-id', storeId);
+    scriptTag.setAttribute('data-api-url', 'http://localhost:8000/api/v1');
+
+    // Manually instantiate the widget class exposed by widget.js
+    window.addEventListener('load', () => {
+      window.ssWidgetInstance = new window.SmartSearchWidget(storeId, 'http://localhost:8000/api/v1');
+    });
+  </script>
+</body>
+</html>

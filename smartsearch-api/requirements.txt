@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sentence-transformers
+chromadb
+pandas
+sqlalchemy
+alembic
+python-dotenv
+psycopg2-binary
+email-validator
+passlib
+redis
+python-jose[cryptography]
+celery
+cryptography
+boto3

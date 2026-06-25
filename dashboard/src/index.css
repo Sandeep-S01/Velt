@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-light: #a78bfa;
+  --color-brand: #863bff;
+  --color-brand-dark: #5b21b6;
+  
+  --color-secondary: #863bff;
+  --color-secondary-container: #ede6ff;
+  
+  --color-success-light: #34D399;
+  --color-success: #10B981;
+  
+  --color-warning: #F59E0B;
+  --color-danger: #Ba1a1a;
+  --color-info: #3B82F6;
+  
+  --color-neutral-background: #f8fafc;
+  --color-neutral-card: #FFFFFF;
+  --color-neutral-lightgray: #f1f5f9;
+  --color-neutral-mediumgray: #64748b;
+  --color-neutral-darkgray: #334155;
+  --color-neutral-charcoal: #0f172a;
+  
+  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+}
+
+@utility glassmorphism {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+@utility glassmorphism-dark {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@layer base {
+  body {
+    @apply bg-neutral-background text-neutral-darkgray font-sans antialiased m-0;
+  }
+}
+
+/* Custom micro-animations and animations */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.5s ease-in-out infinite;
+}
+
+/* Dynamic Radial Gradients matching Velt logo theme */
+.hero-dynamic-gradient {
+  background: radial-gradient(
+    circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+    rgba(71, 191, 255, 0.28) 0%, 
+    rgba(134, 59, 255, 0.18) 35%, 
+    rgba(237, 230, 255, 0.3) 70%, 
+    transparent 100%
+  ), linear-gradient(180deg, rgba(255,255,255,0) 0%, #f8fafc 100%);
+  transition: background 0.1s ease;
+}
+
+.cta-dynamic-gradient {
+  background: radial-gradient(
+    circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+    #863bff 0%, 
+    #5b21b6 45%, 
+    #47bfff 100%
+  );
+  transition: background 0.1s ease;
+}
+
