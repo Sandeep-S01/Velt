@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getApiDocsUrl, WIDGET_SCRIPT_URL } from '../lib/api';
 import {
   ArrowRight,
   Check,
@@ -103,7 +104,7 @@ export const LandingPage: React.FC = () => {
   };
 
   const handleCopyScript = () => {
-    navigator.clipboard.writeText(`<script src="http://localhost:8000/widget.js" data-store-id="velt_store_demo"></script>`);
+    navigator.clipboard.writeText(`<script src="${WIDGET_SCRIPT_URL}" data-store-id="velt_store_demo"></script>`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -731,7 +732,7 @@ export const LandingPage: React.FC = () => {
 
               <pre className="p-4 rounded-xl bg-black/45 border border-white/5 font-mono text-xs text-brand-light select-all overflow-x-auto leading-relaxed">
 {`<script 
-  src="http://localhost:8000/widget.js" 
+  src="${WIDGET_SCRIPT_URL}" 
   data-store-id="velt_store_demo">
 </script>`}
               </pre>
@@ -1253,7 +1254,7 @@ export const LandingPage: React.FC = () => {
             <div className="space-y-3.5">
               <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Developers</h4>
               <ul className="space-y-2 text-xs font-semibold">
-                <li><a className="hover:text-brand flex items-center gap-1" href="http://localhost:8000/docs" target="_blank" rel="noreferrer">API Documentation <ExternalLink className="w-3 h-3" /></a></li>
+                <li><a className="hover:text-brand flex items-center gap-1" href={getApiDocsUrl()} target="_blank" rel="noreferrer">API Documentation <ExternalLink className="w-3 h-3" /></a></li>
                 <li><a className="hover:text-brand" href="#">Embed Code Snippet</a></li>
                 <li><a className="hover:text-brand" href="#">Uptime Status</a></li>
                 <li><a className="hover:text-brand" href="#">GitHub Repository</a></li>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, API_BASE_URL, getApiDocsUrl } from '../../lib/api';
+
 import { Layout } from '../../components/Layout';
 import type { StoreModel } from '../Stores/StoreList';
 import { 
@@ -244,14 +245,23 @@ export const StoreDetail: React.FC = () => {
   const primaryApiKey = apiKeys[0]?.key || 'vt_live_pk_********************';
   const getEmbedCode = (tab: TabType) => {
     const cleanStoreId = store.id;
-    const environmentParam = envMode;
+    const currentOrigin = window.location.origin;
+    const apiV1Base = API_BASE_URL;
+    
     switch(tab) {
       case 'html':
         return `<!-- Place this snippet inside your website's header or footer HTML -->
-<script 
-  src="http://localhost:8000/widget.js" 
-  data-store-id="${cleanStoreId}"
-  data-env="${environmentParam}">
+<!-- 1. Include the search widget script -->
+<script src="${currentOrigin}/widget.js" id="ss-widget-script"></script>
+
+<!-- 2. Initialize the widget with your credentials -->
+<script>
+  window.addEventListener('load', () => {
+    window.ssWidgetInstance = new window.SmartSearchWidget(
+      "${cleanStoreId}",
+      "${apiV1Base}"
+    );
+  });
 </script>`;
       case 'react':
         return `// Velt Search overlay drop-in React Component
@@ -260,10 +270,11 @@ import { useEffect } from 'react';
 export function VeltSearchWidget() {
   useEffect(() => {
     const script = document.createElement('script');
-    script.src = "http://localhost:8000/widget.js";
+    script.src = "${currentOrigin}/widget.js";
     script.async = true;
-    script.setAttribute('data-store-id', '${cleanStoreId}');
-    script.setAttribute('data-env', '${environmentParam}');
+    script.onload = () => {
+      window.ssWidgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}');
+    };
     document.body.appendChild(script);
     
     return () => {
@@ -276,19 +287,21 @@ export function VeltSearchWidget() {
       case 'vue':
         return `<!-- VeltSearchWidget.vue (Vue 3 Composition API) -->
 <template>
-  <!-- Velt overlay initializes automatically -->
   <div id="velt-search-root"></div>
 </template>
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue';
 
+let widgetInstance = null;
+
 onMounted(() => {
   const script = document.createElement('script');
-  script.src = "http://localhost:8000/widget.js";
+  script.src = "${currentOrigin}/widget.js";
   script.async = true;
-  script.setAttribute('data-store-id', '${cleanStoreId}');
-  script.setAttribute('data-env', '${environmentParam}');
+  script.onload = () => {
+    widgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}');
+  };
   document.body.appendChild(script);
   
   onUnmounted(() => {
@@ -299,7 +312,7 @@ onMounted(() => {
       case 'api':
         return `// Direct fetch lookup using Velt AI Semantic Search Endpoint
 const searchCatalog = async (userQuery) => {
-  const response = await fetch('http://localhost:8000/v1/search', {
+  const response = await fetch('${apiV1Base}/search', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -307,12 +320,12 @@ const searchCatalog = async (userQuery) => {
     },
     body: JSON.stringify({
       query: userQuery,
-      store_id: '${cleanStoreId}'
+      limit: 5
     })
   });
-  
   return await response.json();
 };`;
+
       default:
         return '';
     }
@@ -768,10 +781,11 @@ const searchCatalog = async (userQuery) => {
                   <span>Customizer widget UI settings</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
-                <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white font-bold transition-all">
+                 <a href={getApiDocsUrl()} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white font-bold transition-all">
                   <span>Open API Specs</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </a>
+
               </div>
             </div>
 

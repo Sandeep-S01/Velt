@@ -145,11 +145,12 @@ To run the storefront search widget demo locally:
    - `HF_TOKEN` = `your_free_huggingface_token`
    - Add your Neon DB connection string under `DATABASE_URL`.
    - Add your `SECRET_KEY`.
+   - Add `PUBLIC_API_BASE_URL` pointing to your deployed API root (e.g. `https://velt-api.onrender.com`).
 
 ### Frontend Deploy (Vercel)
 1. Create a new project in **Vercel** pointing to your repository.
 2. Select `dashboard` as the **Root Directory**.
-3. Under **Environment Variables**, add `VITE_API_URL` pointing to your deployed Render API (e.g. `https://velt-api.onrender.com/api/v1`).
+3. Under **Environment Variables**, add `VITE_API_URL` pointing to your deployed Render API (e.g. `https://velt-api.onrender.com/api/v1`). If the widget is not served from the dashboard domain, also add `VITE_WIDGET_URL`.
 4. Click **Deploy**. Vercel will build the frontend assets and automatically apply the rewrite paths from `vercel.json` to handle client route redirects.
 
 ---

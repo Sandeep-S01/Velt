@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.core.database import get_db, get_redis
 from app.models.database import Store
 from app.integrations.shopify import (
@@ -97,12 +98,8 @@ def shopify_callback(
         Store.platform_domain == shop_domain
     ).first()
 
-    # Base URL for registering webhooks (could fall back to mock)
-    # In production, we'd use settings or request hostname, let's derive it or default
-    webhook_base_url = "http://localhost:8000"
-
     # Register webhooks and get the webhook secret (HMAC signature key)
-    webhook_secret = register_shopify_webhooks(shop_domain, access_token, webhook_base_url)
+    webhook_secret = register_shopify_webhooks(shop_domain, access_token, settings.public_api_base_url)
 
     # Encrypt access token
     encrypted_token = encrypt_token(access_token)

@@ -38,8 +38,17 @@ class Settings(BaseSettings):
     # Shopify Integration Settings
     SHOPIFY_CLIENT_ID: str = os.getenv("SHOPIFY_CLIENT_ID", "mock_shopify_client_id")
     SHOPIFY_CLIENT_SECRET: str = os.getenv("SHOPIFY_CLIENT_SECRET", "mock_shopify_client_secret")
-    SHOPIFY_REDIRECT_URI: str = os.getenv("SHOPIFY_REDIRECT_URI", "http://localhost:8000/api/v1/shopify/callback")
+    PUBLIC_API_BASE_URL: str = os.getenv("PUBLIC_API_BASE_URL", "http://localhost:8000")
+    SHOPIFY_REDIRECT_URI: str = os.getenv("SHOPIFY_REDIRECT_URI", "")
     SHOPIFY_SCOPES: str = os.getenv("SHOPIFY_SCOPES", "read_products,read_inventory")
+
+    @property
+    def public_api_base_url(self) -> str:
+        return self.PUBLIC_API_BASE_URL.rstrip("/")
+
+    @property
+    def shopify_redirect_uri(self) -> str:
+        return self.SHOPIFY_REDIRECT_URI or f"{self.public_api_base_url}{self.API_V1_STR}/shopify/callback"
 
     # MinIO / S3 Storage Settings
     MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")

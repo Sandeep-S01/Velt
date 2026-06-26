@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, API_BASE_URL } from '../../lib/api';
+
 import { Layout } from '../../components/Layout';
 import type { StoreModel } from '../Stores/StoreList';
 import { 
@@ -322,7 +323,7 @@ export const ApiKeys: React.FC = () => {
             
             <div className="relative group">
               <button
-                onClick={() => triggerCopy(`curl -X POST http://localhost:8000/v1/search \\
+                onClick={() => triggerCopy(`curl -X POST ${API_BASE_URL}/search \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: ${primaryApiKey}" \\
   -d '{"query": "summer apparel", "store_id": "${store.id}"}'`, 'curl')}
@@ -331,11 +332,12 @@ export const ApiKeys: React.FC = () => {
                 {copiedText === 'curl' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
               <pre className="bg-black/50 border border-slate-800 rounded-xl p-3.5 font-mono text-[9.5px] text-slate-300 overflow-x-auto select-all leading-relaxed">
-{`curl -X POST http://localhost:8000/v1/search \\
+{`curl -X POST ${API_BASE_URL}/search \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: ${primaryApiKey}" \\
   -d '{"query": "summer apparel", "store_id": "${store.id}"}'`}
               </pre>
+
             </div>
           </div>
         </div>

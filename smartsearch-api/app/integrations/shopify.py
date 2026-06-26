@@ -49,7 +49,7 @@ def get_shopify_auth_url(shop_domain: str, state: str) -> str:
     query_params = urllib.parse.urlencode({
         "client_id": settings.SHOPIFY_CLIENT_ID,
         "scope": settings.SHOPIFY_SCOPES,
-        "redirect_uri": settings.SHOPIFY_REDIRECT_URI,
+        "redirect_uri": settings.shopify_redirect_uri,
         "state": state
     })
     return f"https://{shop}/admin/oauth/authorize?{query_params}"

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getApiDocsUrl } from '../lib/api';
+
 import {
   Settings,
   BarChart3,
@@ -378,7 +380,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 Developer
               </div>
               <a
-                href="http://localhost:8000/docs"
+                href={getApiDocsUrl()}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-neutral-mediumgray hover:bg-slate-50 hover:text-neutral-charcoal transition-all"

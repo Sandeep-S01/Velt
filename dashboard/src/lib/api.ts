@@ -1,4 +1,27 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
+
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const developmentApiUrl = 'http://localhost:8000/api/v1';
+const productionApiUrl = '/api/v1';
+
+export const API_BASE_URL = trimTrailingSlash(
+  configuredApiUrl || (import.meta.env.DEV ? developmentApiUrl : productionApiUrl)
+);
+
+export const getApiBaseUrl = () => {
+  const url = API_BASE_URL;
+  if (url.endsWith('/api/v1')) {
+    return url.slice(0, -7);
+  }
+  return url;
+};
+
+export const getApiDocsUrl = () => `${API_BASE_URL}/docs`;
+
+export const WIDGET_SCRIPT_URL = trimTrailingSlash(
+  import.meta.env.VITE_WIDGET_URL || (import.meta.env.DEV ? 'http://localhost:8000/widget.js' : '/widget.js')
+);
+
 
 export interface APIError {
   detail: string;
