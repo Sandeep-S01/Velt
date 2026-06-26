@@ -1,8 +1,9 @@
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 import chromadb
 from typing import List, Dict, Any, Optional
 import os
+import requests
+import time
 
 class SemanticSearchEngine:
     def __init__(self,
@@ -17,7 +18,16 @@ class SemanticSearchEngine:
             db_path: Path to persist ChromaDB.
             collection_name: Name of the ChromaDB collection.
         """
-        self.model = SentenceTransformer(model_name)
+        self.model_name = model_name
+        self.use_hf_inference = os.getenv("USE_HF_INFERENCE", "false").lower() == "true"
+        
+        if self.use_hf_inference:
+            self.model = None
+            self.hf_token = os.getenv("HF_TOKEN")
+        else:
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(model_name)
+            
         self.db_path = db_path
         self.collection_name = collection_name
 
@@ -26,6 +36,59 @@ class SemanticSearchEngine:
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(name=self.collection_name)
+
+    def _get_huggingface_embeddings(self, texts: List[str]) -> List[List[float]]:
+        model_id = "sentence-transformers/all-MiniLM-L6-v2"
+        api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+        
+        headers = {}
+        if self.hf_token:
+            headers["Authorization"] = f"Bearer {self.hf_token}"
+            
+        payload = {"inputs": texts}
+        
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+                if response.status_code == 200:
+                    result = response.json()
+                    # Ensure it's a list of lists (embeddings)
+                    if isinstance(result, list):
+                        if len(result) > 0 and not isinstance(result[0], list):
+                            # Single list returned (if HF API returned 1D list instead of 2D for a single element)
+                            return [result]
+                        return result
+                    raise ValueError(f"Unexpected response format from Hugging Face API: {result}")
+                
+                elif response.status_code == 503:
+                    # Model is loading, retry after waiting
+                    err_data = response.json()
+                    wait_time = err_data.get("estimated_time", 10.0)
+                    # Cap the wait time at 20 seconds per retry to avoid blocking indefinitely
+                    wait_time = min(float(wait_time), 20.0)
+                    print(f"Hugging Face model is loading. Waiting {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                    continue
+                
+                else:
+                    response.raise_for_status()
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+                print(f"Error calling Hugging Face API (attempt {attempt + 1}/{max_retries}): {e}. Retrying in 5 seconds...")
+                time.sleep(5)
+                
+        raise RuntimeError("Failed to generate embeddings from Hugging Face Inference API after multiple retries.")
+
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if self.use_hf_inference:
+            return self._get_huggingface_embeddings(texts)
+        else:
+            embeddings = self.model.encode(texts, show_progress_bar=False)
+            if hasattr(embeddings, "tolist"):
+                return embeddings.tolist()
+            return embeddings
 
     def load_products_from_csv(self, csv_path: str,
                                description_column: str = 'description',
@@ -61,11 +124,11 @@ class SemanticSearchEngine:
 
         # Generate embeddings
         print(f"Generating embeddings for {len(documents)} products...")
-        embeddings = self.model.encode(documents, show_progress_bar=True)
+        embeddings = self.get_embeddings(documents)
 
         # Store in ChromaDB
         self.collection.add(
-            embeddings=embeddings.tolist(),
+            embeddings=embeddings,
             documents=documents,
             metadatas=metadatas,
             ids=ids
@@ -84,11 +147,11 @@ class SemanticSearchEngine:
             List of dictionaries containing id, document (description), metadata, and distance score.
         """
         # Embed the query
-        query_embedding = self.model.encode([query])
+        query_embedding = self.get_embeddings([query])
 
         # Search in ChromaDB
         results = self.collection.query(
-            query_embeddings=query_embedding.tolist(),
+            query_embeddings=query_embedding,
             n_results=n_results,
             include=['documents', 'metadatas', 'distances']
         )
@@ -166,11 +229,11 @@ class SemanticSearchEngine:
             metadatas.append(metadata)
 
         # Generate embeddings in batch
-        embeddings = self.model.encode(documents, show_progress_bar=False)
+        embeddings = self.get_embeddings(documents)
 
         # Upsert into ChromaDB to overwrite if the ID already exists
         collection.upsert(
-            embeddings=embeddings.tolist(),
+            embeddings=embeddings,
             documents=documents,
             metadatas=metadatas,
             ids=ids
@@ -193,7 +256,7 @@ class SemanticSearchEngine:
             return []
 
         # Embed the query
-        query_embedding = self.model.encode([query])
+        query_embedding = self.get_embeddings([query])
 
         # Ensure n_results does not exceed total items in collection
         actual_n = min(n_results, total_count)
@@ -202,7 +265,7 @@ class SemanticSearchEngine:
 
         # Search in ChromaDB
         results = collection.query(
-            query_embeddings=query_embedding.tolist(),
+            query_embeddings=query_embedding,
             n_results=actual_n,
             include=['documents', 'metadatas', 'distances']
         )
