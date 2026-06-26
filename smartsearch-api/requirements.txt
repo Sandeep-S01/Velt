@@ -14,3 +14,4 @@ python-jose[cryptography]
 celery
 cryptography
 boto3
+python-multipart
