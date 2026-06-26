@@ -11,7 +11,9 @@ import {
   Globe,
   BookOpen,
   ChevronDown,
-  Plus
+  Plus,
+  Menu,
+  X
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -35,6 +37,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
   // Store selector drop state
   const [storeSelectOpen, setStoreSelectOpen] = useState(false);
+  // Mobile responsive sidebar open/close state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -55,8 +59,18 @@ export const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="flex h-screen bg-slate-50 text-neutral-charcoal font-sans overflow-hidden">
       
-      {/* Redesigned Sidebar: Stripe-like visual layout */}
-      <aside className="w-72 bg-white border-r border-neutral-lightgray flex flex-col justify-between shrink-0 z-20">
+      {/* Sidebar overlay backdrop for mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Redesigned Sidebar: Stripe-like responsive visual layout */}
+      <aside className={`fixed inset-y-0 left-0 w-72 bg-white border-r border-neutral-lightgray flex flex-col justify-between shrink-0 z-40 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
         <div className="flex flex-col flex-1 overflow-y-auto">
           
           {/* Logo Header */}
@@ -194,7 +208,17 @@ export const Layout: React.FC<LayoutProps> = ({
               </svg>
               <span className="text-xl font-black tracking-tighter text-neutral-charcoal">Velt</span>
             </Link>
-            <span className="text-[10px] bg-brand/10 border border-brand/25 text-brand px-2 py-0.5 rounded-full font-bold uppercase">Console</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] bg-brand/10 border border-brand/25 text-brand px-2 py-0.5 rounded-full font-bold uppercase">Console</span>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="p-1 text-neutral-mediumgray hover:text-neutral-charcoal lg:hidden rounded-lg hover:bg-slate-100 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Store Selector Dropdown */}
@@ -404,8 +428,18 @@ export const Layout: React.FC<LayoutProps> = ({
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
         
         {/* Top Header Context bar */}
-        <header className="h-16 border-b border-neutral-lightgray/80 bg-white flex items-center justify-between px-8 z-10 shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="h-16 border-b border-neutral-lightgray/80 bg-white flex items-center justify-between px-4 lg:px-8 z-10 shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Mobile Sidebar Hamburger Toggle */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="p-1.5 -ml-1 text-neutral-mediumgray hover:text-neutral-charcoal lg:hidden rounded-xl hover:bg-slate-50 border border-neutral-lightgray/50 transition-colors"
+              aria-label="Open sidebar"
+            >
+              <Menu className="w-4.5 h-4.5" />
+            </button>
+
             {currentStore ? (
               <div className="flex items-center gap-2">
                 <StoreIcon className="w-4.5 h-4.5 text-brand" />
@@ -426,7 +460,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
           <div className="flex items-center gap-4">
             {currentStore && (
-              <span className="text-[10px] text-neutral-mediumgray bg-slate-50 border border-neutral-lightgray/80 px-2.5 py-1 rounded-lg font-mono font-bold select-all shadow-sm">
+              <span className="hidden sm:inline-block text-[10px] text-neutral-mediumgray bg-slate-50 border border-neutral-lightgray/80 px-2.5 py-1 rounded-lg font-mono font-bold select-all shadow-sm">
                 Store ID: {currentStore.id}
               </span>
             )}
@@ -434,7 +468,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </header>
 
         {/* Viewport content */}
-        <main className="flex-1 overflow-y-auto p-8 relative">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8 relative">
           {children}
         </main>
       </div>
