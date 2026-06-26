@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.database import create_tables, get_redis
 from app.core.config import settings
@@ -140,6 +140,15 @@ async def health_check():
             "redis": redis_status
         }
     }
+
+# Redirects for standard documentation paths
+@app.get("/docs", include_in_schema=False)
+async def docs_redirect():
+    return RedirectResponse(url=f"{settings.API_V1_STR}/docs")
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_redirect():
+    return RedirectResponse(url=f"{settings.API_V1_STR}/redoc")
 
 # Root endpoint
 @app.get("/", tags=["root"])
