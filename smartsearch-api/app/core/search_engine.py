@@ -23,7 +23,10 @@ class SemanticSearchEngine:
         
         if self.use_hf_inference:
             self.model = None
-            self.hf_token = os.getenv("HF_TOKEN")
+            token = os.getenv("HF_TOKEN")
+            self.hf_token = token.strip() if token else None
+            if not self.hf_token:
+                self.hf_token = None
         else:
             from sentence_transformers import SentenceTransformer
             self.model = SentenceTransformer(model_name)
