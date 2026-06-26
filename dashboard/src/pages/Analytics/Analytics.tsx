@@ -13,9 +13,9 @@ interface AnalyticsData {
   total_searches: number;
   no_results_count: number;
   click_through_rate: number;
-  top_queries: Array<{ query: string; count: number; clicks: number }>;
-  top_clicked_products: Array<{ title: string; count: number }>;
-  queries_without_results: Array<{ query: string; count: number }>;
+  top_queries: Array<{ query: string; count: number; clicks?: number }>;
+  top_clicked_products: Array<{ title: string; count?: number; click_count?: number }>;
+  queries_without_results?: Array<{ query: string; count: number }>;
 }
 
 export const Analytics: React.FC = () => {
@@ -305,16 +305,19 @@ export const Analytics: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {data.top_queries.slice(0, 5).map((q, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-all">
-                        <td className="px-6 py-4 text-neutral-charcoal font-mono truncate max-w-[200px]">"{q.query}"</td>
-                        <td className="px-6 py-4 text-center text-slate-800">{q.count}</td>
-                        <td className="px-6 py-4 text-center text-slate-800">{q.clicks}</td>
-                        <td className="px-6 py-4 text-right text-brand font-bold">
-                          {q.count > 0 ? ((q.clicks / q.count) * 100).toFixed(0) : '0'}%
-                        </td>
-                      </tr>
-                    ))}
+                    {data.top_queries.slice(0, 5).map((q, idx) => {
+                      const clicks = (q as any).clicks ?? (q as any).click_count ?? 0;
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-all">
+                          <td className="px-6 py-4 text-neutral-charcoal font-mono truncate max-w-[200px]">"{q.query}"</td>
+                          <td className="px-6 py-4 text-center text-slate-800">{q.count}</td>
+                          <td className="px-6 py-4 text-center text-slate-800">{clicks}</td>
+                          <td className="px-6 py-4 text-right text-brand font-bold">
+                            {q.count > 0 ? ((clicks / q.count) * 100).toFixed(0) : '0'}%
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -328,7 +331,7 @@ export const Analytics: React.FC = () => {
                 <AlertTriangle className="w-4 h-4 text-amber-500" /> Zero-Result Insights
               </h2>
               
-              {data.queries_without_results.length === 0 ? (
+              {(!data.queries_without_results || data.queries_without_results.length === 0) ? (
                 <div className="text-center py-8 text-xs text-neutral-mediumgray">
                   🎉 Good news! No failed search terms recorded this week.
                 </div>
@@ -379,7 +382,7 @@ export const Analytics: React.FC = () => {
                   {data.top_clicked_products.slice(0, 5).map((p, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50 transition-all">
                       <td className="px-6 py-4 text-neutral-charcoal truncate max-w-[400px]">{p.title}</td>
-                      <td className="px-6 py-4 text-right text-slate-800 font-bold">{p.count} clicks</td>
+                      <td className="px-6 py-4 text-right text-slate-800 font-bold">{(p.count ?? (p as any).click_count ?? 0)} clicks</td>
                     </tr>
                   ))}
                 </tbody>
