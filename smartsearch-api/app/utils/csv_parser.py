@@ -3,7 +3,7 @@ CSV parser utility for product ingestion.
 """
 
 import io
-import pandas as pd
+import csv
 from typing import List, Dict, Any
 
 MAX_PRODUCTS_PER_FILE = 50_000
@@ -15,13 +15,14 @@ def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
     Parse CSV bytes, map headers dynamically to match schema standard, and clean row data.
     """
     content = csv_bytes.decode('utf-8', errors='ignore')
-    df = pd.read_csv(io.StringIO(content))
-    if len(df.index) > MAX_PRODUCTS_PER_FILE:
+    reader = csv.DictReader(io.StringIO(content))
+    rows = list(reader)
+    if len(rows) > MAX_PRODUCTS_PER_FILE:
         raise ValueError(f"Catalog exceeds {MAX_PRODUCTS_PER_FILE} product limit")
     
     # Mapping table mapping lowercase variants to standardized database columns
     col_map = {}
-    for col in df.columns:
+    for col in reader.fieldnames or []:
         col_lower = str(col).strip().lower()
         if col_lower in ('id', 'external_id', 'product_id', 'sku'):
             col_map[col] = 'id'
@@ -43,53 +44,56 @@ def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
             col_map[col] = 'inventory_count'
         elif col_lower in ('is_active', 'active', 'published'):
             col_map[col] = 'is_active'
-            
-    df = df.rename(columns=col_map)
     
     products = []
-    for idx, row in df.iterrows():
-        raw_id = row.get('id')
-        if pd.isna(raw_id) or not str(raw_id).strip():
+    for row in rows:
+        normalized_row = {
+            col_map.get(key, key): _clean_csv_value(value)
+            for key, value in row.items()
+        }
+
+        raw_id = normalized_row.get('id')
+        if _is_blank(raw_id):
             continue
         p_id = str(raw_id).strip()[:255]
             
-        raw_title = row.get('title')
-        if pd.isna(raw_title) or not str(raw_title).strip():
+        raw_title = normalized_row.get('title')
+        if _is_blank(raw_title):
             # Skip row if title is completely missing
             continue
         title = str(raw_title).strip()[:MAX_TITLE_LENGTH]
             
-        price_val = row.get('price')
-        price = float(price_val) if pd.notna(price_val) and price_val != "" else None
+        price_val = normalized_row.get('price')
+        price = float(price_val) if not _is_blank(price_val) else None
         if price is not None and price < 0:
             raise ValueError(f"Negative price for product {p_id}")
         
-        inventory_val = row.get('inventory_count', 0)
+        inventory_val = normalized_row.get('inventory_count', 0)
         try:
-            inventory = max(0, int(float(inventory_val))) if pd.notna(inventory_val) else 0
+            inventory = max(0, int(float(inventory_val))) if not _is_blank(inventory_val) else 0
         except ValueError:
             inventory = 0
             
-        active_val = row.get('is_active', True)
+        active_val = normalized_row.get('is_active', True)
         if isinstance(active_val, str):
             is_active = active_val.strip().lower() in ('true', '1', 'yes', 'y')
         else:
-            is_active = bool(active_val) if pd.notna(active_val) else True
+            is_active = bool(active_val) if not _is_blank(active_val) else True
 
-        # Convert float NaN values from pandas row to None for clean JSON serialization
-        raw_metadata = {}
-        for k, v in row.to_dict().items():
-            raw_metadata[k] = None if pd.isna(v) else v
+        raw_metadata = {
+            key: _clean_csv_value(value)
+            for key, value in row.items()
+        }
 
         product = {
             "id": p_id,
             "title": title,
-            "description": str(row.get('description', ''))[:MAX_DESCRIPTION_LENGTH] if pd.notna(row.get('description')) else None,
+            "description": _optional_str(normalized_row.get('description'), MAX_DESCRIPTION_LENGTH),
             "price": price,
-            "category": str(row.get('category', '')) if pd.notna(row.get('category')) else None,
-            "brand": str(row.get('brand', '')) if pd.notna(row.get('brand')) else None,
-            "image_url": str(row.get('image_url', '')) if pd.notna(row.get('image_url')) else None,
-            "product_url": str(row.get('product_url', '')) if pd.notna(row.get('product_url')) else None,
+            "category": _optional_str(normalized_row.get('category')),
+            "brand": _optional_str(normalized_row.get('brand')),
+            "image_url": _optional_str(normalized_row.get('image_url')),
+            "product_url": _optional_str(normalized_row.get('product_url')),
             "inventory_count": inventory,
             "is_active": is_active,
             "product_metadata": raw_metadata
@@ -97,3 +101,25 @@ def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
         products.append(product)
         
     return products
+
+
+def _clean_csv_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped if stripped else None
+    return value
+
+
+def _is_blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _optional_str(value: Any, max_length: int | None = None) -> str | None:
+    if _is_blank(value):
+        return None
+    text = str(value).strip()
+    if max_length is not None:
+        return text[:max_length]
+    return text
