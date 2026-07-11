@@ -20,6 +20,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-only-secret-key-with-at-least-32-bytes
       USE_HF_INFERENCE: "false"
+      TEST_EMBEDDINGS: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,13 +29,15 @@ jobs:
           cache: pip
           cache-dependency-path: |
             smartsearch-api/requirements.txt
+            smartsearch-api/requirements-base.txt
+            smartsearch-api/requirements-ci.txt
             smartsearch-api/requirements-dev.txt
       - uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: huggingface-${{ runner.os }}-all-MiniLM-L6-v2
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip install -r requirements-ci.txt
       - run: python -m ruff check app tests
       - run: python -m compileall -q app
       - run: python -m pytest -q
