@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN groupadd --system velt && useradd --system --gid velt --home /app velt
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY requirements.txt requirements-base.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip pip install --requirement requirements.txt
 
 COPY alembic.ini ./
