@@ -18,21 +18,20 @@ _search_engine = None
 def get_search_engine():
     """Get or initialize the SemanticSearchEngine singleton for background task workers."""
     global _search_engine
+    import sys
+    if "pytest" in sys.modules:
+        try:
+            from app.main import app
+            if hasattr(app, "state") and hasattr(app.state, "search_engine"):
+                _search_engine = app.state.search_engine
+        except Exception:
+            pass
+
     if _search_engine is None:
-        import sys
-        if "pytest" in sys.modules:
-            try:
-                from app.main import app
-                if hasattr(app, "state") and hasattr(app.state, "search_engine"):
-                    _search_engine = app.state.search_engine
-            except Exception:
-                pass
-        
-        if _search_engine is None:
-            from app.core.search_engine import SemanticSearchEngine
-            path = os.path.abspath(settings.CHROMA_DB_PATH)
-            os.makedirs(path, exist_ok=True)
-            _search_engine = SemanticSearchEngine(db_path=path)
+        from app.core.search_engine import SemanticSearchEngine
+        path = os.path.abspath(settings.CHROMA_DB_PATH)
+        os.makedirs(path, exist_ok=True)
+        _search_engine = SemanticSearchEngine(db_path=path)
     return _search_engine
 
 @celery_app.task(name="app.tasks.sync.sync_shopify_products_task")

@@ -1,10 +1,77 @@
-import pandas as pd
-import chromadb
 from typing import List, Dict, Any, Optional
 import os
 import requests
 import time
 import hashlib
+import math
+
+
+class _InMemoryCollection:
+    def __init__(self):
+        self.items: dict[str, dict[str, Any]] = {}
+
+    def add(self, embeddings, documents, metadatas, ids):
+        self.upsert(embeddings=embeddings, documents=documents, metadatas=metadatas, ids=ids)
+
+    def upsert(self, embeddings, documents, metadatas, ids):
+        for item_id, embedding, document, metadata in zip(ids, embeddings, documents, metadatas):
+            self.items[str(item_id)] = {
+                "embedding": embedding,
+                "document": document,
+                "metadata": metadata,
+            }
+
+    def delete(self, ids):
+        for item_id in ids:
+            self.items.pop(str(item_id), None)
+
+    def count(self):
+        return len(self.items)
+
+    def query(self, query_embeddings, n_results, where=None, include=None):
+        query_embedding = query_embeddings[0]
+        scored = []
+        for item_id, item in self.items.items():
+            metadata = item["metadata"]
+            if where and not self._matches_where(metadata, where):
+                continue
+            score = self._cosine_similarity(query_embedding, item["embedding"])
+            scored.append((item_id, item, score))
+
+        scored.sort(key=lambda row: (-row[2], row[0]))
+        selected = scored[:n_results]
+        return {
+            "ids": [[item_id for item_id, _, _ in selected]],
+            "documents": [[item["document"] for _, item, _ in selected]],
+            "metadatas": [[item["metadata"] for _, item, _ in selected]],
+            "distances": [[1 - score for _, _, score in selected]],
+        }
+
+    def _matches_where(self, metadata, where):
+        if "$and" in where:
+            return all(self._matches_where(metadata, condition) for condition in where["$and"])
+        return all(metadata.get(key) == value for key, value in where.items())
+
+    def _cosine_similarity(self, left, right):
+        numerator = sum(a * b for a, b in zip(left, right))
+        left_norm = math.sqrt(sum(a * a for a in left))
+        right_norm = math.sqrt(sum(b * b for b in right))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return numerator / (left_norm * right_norm)
+
+
+class _InMemoryChromaClient:
+    def __init__(self):
+        self.collections: dict[str, _InMemoryCollection] = {}
+
+    def get_or_create_collection(self, name, metadata=None):
+        if name not in self.collections:
+            self.collections[name] = _InMemoryCollection()
+        return self.collections[name]
+
+    def heartbeat(self):
+        return 1
 
 class SemanticSearchEngine:
     def __init__(self,
@@ -40,7 +107,11 @@ class SemanticSearchEngine:
         self.collection_name = collection_name
 
         # Initialize ChromaDB client with persistent storage
-        self.client = chromadb.PersistentClient(path=self.db_path)
+        if self.use_test_embeddings:
+            self.client = _InMemoryChromaClient()
+        else:
+            import chromadb
+            self.client = chromadb.PersistentClient(path=self.db_path)
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(name=self.collection_name)
@@ -150,6 +221,7 @@ class SemanticSearchEngine:
             id_column: Column name for unique IDs. If None, uses index.
             metadata_columns: List of column names to store as metadata.
         """
+        import pandas as pd
         df = pd.read_csv(csv_path)
 
         # Prepare data
