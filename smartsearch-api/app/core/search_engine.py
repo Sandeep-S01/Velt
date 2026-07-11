@@ -207,11 +207,12 @@ class SemanticSearchEngine:
             prod_id = str(prod.get("id"))
             ids.append(prod_id)
 
-            # Build document text
+            # Keep the embedding input stable so index versions can be compared.
             title = prod.get("title", "")
             desc = prod.get("description", "")
-            # Combine title and description for richer semantic context
-            doc_text = f"{title}. {desc}" if desc else title
+            category = prod.get("category", "") or ""
+            brand = prod.get("brand", "") or ""
+            doc_text = ". ".join(part for part in (title, brand, category, desc) if part)
             documents.append(doc_text)
 
             # Prepare metadata according to 05_Backend_Schema.md
@@ -221,8 +222,8 @@ class SemanticSearchEngine:
                 "store_id": store_id,
                 "title": title,
                 "price": float(prod.get("price")) if prod.get("price") is not None else 0.0,
-                "category": prod.get("category", "") or "",
-                "brand": prod.get("brand", "") or "",
+                "category": category,
+                "brand": brand,
                 "image_url": prod.get("image_url", "") or "",
                 "product_url": prod.get("product_url", "") or "",
                 "is_active": bool(prod.get("is_active", True)),
@@ -249,7 +250,13 @@ class SemanticSearchEngine:
         collection = self._get_store_collection(store_id)
         collection.delete(ids=ids)
 
-    def search_store(self, store_id: str, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    def search_store(
+        self,
+        store_id: str,
+        query: str,
+        n_results: int = 5,
+        min_score: float = 0.0,
+    ) -> List[Dict[str, Any]]:
         """Search for products in a store-specific collection."""
         collection = self._get_store_collection(store_id)
         
@@ -270,6 +277,7 @@ class SemanticSearchEngine:
         results = collection.query(
             query_embeddings=query_embedding,
             n_results=actual_n,
+            where={"$and": [{"is_active": True}, {"is_searchable": True}]},
             include=['documents', 'metadatas', 'distances']
         )
 
@@ -278,15 +286,18 @@ class SemanticSearchEngine:
         if results['ids'] and len(results['ids'][0]) > 0:
             for i in range(len(results['ids'][0])):
                 distance = results['distances'][0][i]
+                score = float(1 - distance)
+                if score < min_score:
+                    continue
                 formatted_results.append({
                     'id': results['ids'][0][i],
                     'description': results['documents'][0][i],
                     'metadata': results['metadatas'][0][i],
                     'distance': distance,
-                    'score': float(1 - distance)  # Convert distance to similarity score
+                    'score': score
                 })
 
-        return formatted_results
+        return sorted(formatted_results, key=lambda item: (-item["score"], item["id"]))
 
 # Example usage (for testing)
 if __name__ == "__main__":

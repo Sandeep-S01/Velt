@@ -5,6 +5,10 @@ JSON parser utility for product ingestion.
 import json
 from typing import List, Dict, Any
 
+MAX_PRODUCTS_PER_FILE = 50_000
+MAX_TITLE_LENGTH = 500
+MAX_DESCRIPTION_LENGTH = 20_000
+
 def parse_products_json(json_bytes: bytes) -> List[Dict[str, Any]]:
     """
     Parse JSON bytes, map fields dynamically, and clean raw data.
@@ -23,6 +27,8 @@ def parse_products_json(json_bytes: bytes) -> List[Dict[str, Any]]:
             
     if not isinstance(data, list):
         raise ValueError("Invalid JSON format. Expected list of products or dictionary containing a product list.")
+    if len(data) > MAX_PRODUCTS_PER_FILE:
+        raise ValueError(f"Catalog exceeds {MAX_PRODUCTS_PER_FILE} product limit")
         
     products = []
     for idx, item in enumerate(data):
@@ -36,13 +42,14 @@ def parse_products_json(json_bytes: bytes) -> List[Dict[str, Any]]:
                 p_id = str(item[id_key]).strip()
                 break
         if not p_id:
-            p_id = f"json_row_{idx}"
+            continue
+        p_id = p_id[:255]
             
         # Resolve title
         title = None
         for title_key in ('title', 'name', 'product_name'):
             if title_key in item and item[title_key]:
-                title = str(item[title_key]).strip()
+                title = str(item[title_key]).strip()[:MAX_TITLE_LENGTH]
                 break
         if not title:
             continue
@@ -51,7 +58,7 @@ def parse_products_json(json_bytes: bytes) -> List[Dict[str, Any]]:
         description = None
         for desc_key in ('description', 'desc', 'body_html', 'body'):
             if desc_key in item and item[desc_key]:
-                description = str(item[desc_key]).strip()
+                description = str(item[desc_key]).strip()[:MAX_DESCRIPTION_LENGTH]
                 break
                 
         # Resolve price
@@ -63,13 +70,15 @@ def parse_products_json(json_bytes: bytes) -> List[Dict[str, Any]]:
                 except (ValueError, TypeError):
                     pass
                 break
+        if price is not None and price < 0:
+            raise ValueError(f"Negative price for product {p_id}")
                 
         # Resolve inventory
         inventory = 0
         for inv_key in ('inventory_count', 'inventory', 'quantity', 'qty', 'stock'):
             if inv_key in item and item[inv_key] is not None:
                 try:
-                    inventory = int(item[inv_key])
+                    inventory = max(0, int(item[inv_key]))
                 except (ValueError, TypeError):
                     pass
                 break

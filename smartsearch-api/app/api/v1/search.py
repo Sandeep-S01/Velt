@@ -2,15 +2,14 @@
 API routes for semantic search.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.core.database import get_db
-from app.utils.security import verify_api_key
+from app.utils.security import require_api_key_scope, verify_api_key
 from app.core.search_engine import SemanticSearchEngine
 from app.models.schemas import SearchRequest, SearchResult
-import os
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -31,9 +30,16 @@ def semantic_search(
     Requires valid API key.
     """
     api_key, store = api_key_info
+    require_api_key_scope(api_key, "search")
 
     try:
-        results = search_engine.search_store(store_id=store.id, query=request.query, n_results=request.limit or 5)
+        threshold = float((store.search_config or {}).get("min_score_threshold", 0.25))
+        results = search_engine.search_store(
+            store_id=store.id,
+            query=request.query,
+            n_results=request.limit or 5,
+            min_score=max(0.0, min(1.0, threshold)),
+        )
 
         # Convert to the expected format
         return [

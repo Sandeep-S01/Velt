@@ -33,7 +33,7 @@ def create_user(db: Session, user: UserCreate):
     hashed_password = pwd_context.hash(user.password)
 
     # Create user dict without password field
-    user_data = user.dict()
+    user_data = user.model_dump()
     del user_data['password']
 
     # Create user instance
@@ -48,7 +48,7 @@ def update_user(db: Session, user_id: str, user: UserUpdate):
     """Update an existing user."""
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user:
-        update_data = user.dict(exclude_unset=True)
+        update_data = user.model_dump(exclude_unset=True)
         # Hash password if it's being updated
         if 'password' in update_data:
             update_data['password_hash'] = pwd_context.hash(update_data.pop('password'))

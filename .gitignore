@@ -52,6 +52,7 @@ chroma_db/
 app/chroma_db/
 smartsearch-api/app/chroma_db/
 smartsearch-api/chroma_db/
+smartsearch-api/tests/integration/test_*_chroma_db/
 db.sqlite3
 
 # Operating System files
@@ -72,3 +73,9 @@ pnpm-debug.log*
 huggingface/
 .cache/
 sentence-transformers/
+
+# Runtime application data
+smartsearch-api/data/uploads/
+
+# Keep empty runtime directories without tracking merchant data
+!smartsearch-api/data/uploads/.gitkeep

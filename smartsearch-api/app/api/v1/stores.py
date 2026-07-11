@@ -4,16 +4,30 @@ API routes for store management.
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 import csv
 import io
 
 from app.core.database import get_db
-from app.utils.security import get_current_active_user, verify_api_key
-from app.models.database import Store, User, APIKey
-from app.models.schemas import StoreCreate, StoreUpdate, StoreResponse, APIKeyCreate, APIKeyResponse
+from app.utils.security import (
+    api_key_prefix,
+    get_current_active_user,
+    get_owned_store,
+    hash_api_key,
+    require_api_key_scope,
+    verify_api_key,
+)
+from app.models.database import APIKey
+from app.models.schemas import (
+    APIKeyCreate,
+    APIKeyCreateResponse,
+    APIKeyResponse,
+    StoreCreate,
+    StoreResponse,
+    StoreUpdate,
+)
 from app.services.store_service import (
-    get_store, get_stores, create_store, update_store, delete_store
+    get_stores, create_store, update_store, delete_store
 )
 
 router = APIRouter(prefix="/stores", tags=["stores"])
@@ -25,7 +39,7 @@ def create_new_store(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Create a new store."""
-    return create_store(db=db, store=store)
+    return create_store(db=db, store=store, owner_user_id=current_user.id)
 
 @router.get("/", response_model=List[StoreResponse])
 def read_stores(
@@ -35,7 +49,7 @@ def read_stores(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Retrieve stores with pagination."""
-    stores = get_stores(db, skip=skip, limit=limit)
+    stores = get_stores(db, skip=skip, limit=limit, owner_user_id=current_user.id)
     return stores
 
 @router.get("/{store_id}", response_model=StoreResponse)
@@ -45,10 +59,7 @@ def read_store(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Get a specific store by ID."""
-    db_store = get_store(db, store_id=store_id)
-    if db_store is None:
-        raise HTTPException(status_code=404, detail="Store not found")
-    return db_store
+    return get_owned_store(db, store_id, current_user.id)
 
 @router.put("/{store_id}", response_model=StoreResponse)
 def update_existing_store(
@@ -58,6 +69,7 @@ def update_existing_store(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Update a store."""
+    get_owned_store(db, store_id, current_user.id)
     db_store = update_store(db, store_id=store_id, store=store)
     if db_store is None:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -70,6 +82,7 @@ def delete_existing_store(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Delete a store."""
+    get_owned_store(db, store_id, current_user.id)
     success = delete_store(db, store_id=store_id)
     if not success:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -97,6 +110,7 @@ async def upload_products_csv(
     Requires valid API key for the store.
     """
     api_key, store = api_key_info
+    require_api_key_scope(api_key, "ingest")
 
     # Verify that the store_id matches the API key's store
     if str(store.id) != store_id:
@@ -147,11 +161,16 @@ async def upload_products_csv(
             }
 
             # Upsert into PostgreSQL DB
-            db_product = get_product(db, product_id=product_data["id"])
+            db_product = get_product(db, product_id=product_data["id"], store_id=store_id)
             if db_product:
                 # Update existing product
                 update_data = ProductUpdate(**product_data)
-                update_product(db, product_id=product_data["id"], product=update_data)
+                update_product(
+                    db,
+                    product_id=product_data["id"],
+                    product=update_data,
+                    store_id=store_id,
+                )
             else:
                 # Create new product
                 create_data = ProductCreate(**product_data)
@@ -182,7 +201,7 @@ async def upload_products_csv(
 
 import secrets
 
-@router.post("/{store_id}/keys", response_model=APIKeyResponse)
+@router.post("/{store_id}/keys", response_model=APIKeyCreateResponse)
 def create_store_api_key(
     store_id: str,
     key_in: APIKeyCreate,
@@ -190,23 +209,37 @@ def create_store_api_key(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Generate a new API key for the store."""
-    store = db.query(Store).filter(Store.id == store_id).first()
-    if not store:
-        raise HTTPException(status_code=404, detail="Store not found")
+    get_owned_store(db, store_id, current_user.id)
         
     new_key = f"ss_live_{secrets.token_hex(20)}"
+    key_prefix = api_key_prefix(new_key)
     
     db_api_key = APIKey(
-        key=new_key,
+        key=None,
+        key_hash=hash_api_key(new_key),
+        key_prefix=key_prefix,
         store_id=store_id,
         name=key_in.name,
+        scopes=",".join(sorted(set(key_in.scopes))),
         is_active=key_in.is_active,
         expires_at=key_in.expires_at
     )
     db.add(db_api_key)
     db.commit()
     db.refresh(db_api_key)
-    return db_api_key
+    return {
+        "id": db_api_key.id,
+        "key": new_key,
+        "key_prefix": key_prefix,
+        "store_id": db_api_key.store_id,
+        "name": db_api_key.name,
+        "scopes": db_api_key.scopes,
+        "is_active": db_api_key.is_active,
+        "expires_at": db_api_key.expires_at,
+        "last_used_at": db_api_key.last_used_at,
+        "revoked_at": db_api_key.revoked_at,
+        "created_at": db_api_key.created_at,
+    }
 
 @router.get("/{store_id}/keys", response_model=List[APIKeyResponse])
 def get_store_api_keys(
@@ -215,9 +248,7 @@ def get_store_api_keys(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Retrieve active API keys for the store."""
-    store = db.query(Store).filter(Store.id == store_id).first()
-    if not store:
-        raise HTTPException(status_code=404, detail="Store not found")
+    get_owned_store(db, store_id, current_user.id)
         
     return db.query(APIKey).filter(APIKey.store_id == store_id).all()
 
@@ -229,10 +260,28 @@ def revoke_store_api_key(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Revoke/Delete an API key."""
+    get_owned_store(db, store_id, current_user.id)
     db_key = db.query(APIKey).filter(APIKey.id == key_id, APIKey.store_id == store_id).first()
     if not db_key:
         raise HTTPException(status_code=404, detail="API key not found")
         
-    db.delete(db_key)
+    from datetime import UTC, datetime
+
+    db_key.is_active = False
+    db_key.revoked_at = datetime.now(UTC)
     db.commit()
     return {"message": "API key revoked successfully"}
+
+
+@router.post("/{store_id}/widget-token/rotate", response_model=StoreResponse)
+def rotate_store_widget_token(
+    store_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Rotate the public widget credential and invalidate existing embeds."""
+    store = get_owned_store(db, store_id, current_user.id)
+    store.widget_token = f"ss_widget_{secrets.token_urlsafe(24)}"
+    db.commit()
+    db.refresh(store)
+    return store

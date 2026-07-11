@@ -6,10 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 import os
 import shutil
-import json
 import base64
-import hmac
 import hashlib
+import hmac
+import json
+from urllib.parse import parse_qs, urlparse
 
 import app.core.database
 # Stub out database and Redis connections on app lifespan to prevent starting them up
@@ -19,7 +20,7 @@ app.core.database.get_redis = lambda: None
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.search_engine import SemanticSearchEngine
-from app.models.database import Store, Product, WebhookEvent, User
+from app.models.database import Store, Product, WebhookEvent
 from app.integrations.shopify import decrypt_token
 from tests.conftest import engine, TestingSessionLocal
 from app.core.config import settings
@@ -62,22 +63,46 @@ def test_client():
 
 def test_shopify_oauth_flow(test_client):
     """Test authorize redirect and callback handling."""
+    register = test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "shopify-owner@example.com",
+            "full_name": "Shopify Owner",
+            "password": "securepassword123",
+        },
+    )
+    assert register.status_code == 200
+    owner_id = register.json()["id"]
+    login = test_client.post(
+        "/api/v1/auth/token",
+        data={"username": "shopify-owner@example.com", "password": "securepassword123"},
+    )
+    auth_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
     # 1. Authorize redirect
     auth_resp = test_client.get(
-        "/api/v1/shopify/authorize?shop=my-test-store&user_id=user123",
+        "/api/v1/shopify/authorize?shop=my-test-store",
+        headers=auth_headers,
         follow_redirects=False
     )
     assert auth_resp.status_code == 307
     location = auth_resp.headers["location"]
     assert "my-test-store.myshopify.com" in location
     assert "client_id=" in location
-    assert "state=user123_" in location
+    state_param = parse_qs(urlparse(location).query)["state"][0]
 
     # 2. Callback exchange
-    # Generate state parameter to simulate callback
-    state_param = "user123_abcde12345"
+    callback_params = {
+        "code": "mock_authorization_code",
+        "shop": "my-test-store.myshopify.com",
+        "state": state_param,
+    }
+    message = "&".join(f"{key}={value}" for key, value in sorted(callback_params.items()))
+    callback_params["hmac"] = hmac.new(
+        settings.SHOPIFY_CLIENT_SECRET.encode(), message.encode(), hashlib.sha256
+    ).hexdigest()
     callback_resp = test_client.get(
-        f"/api/v1/shopify/callback?code=mock_authorization_code&shop=my-test-store&state={state_param}"
+        "/api/v1/shopify/callback", params=callback_params
     )
     assert callback_resp.status_code == 200
     res_data = callback_resp.json()
@@ -90,6 +115,7 @@ def test_shopify_oauth_flow(test_client):
     assert store is not None
     assert store.platform == "shopify"
     assert store.platform_domain == "my-test-store.myshopify.com"
+    assert store.owner_user_id == owner_id
     assert store.index_status == "ready"
     
     # Verify Decrypted Access Token
@@ -117,7 +143,6 @@ def test_shopify_webhooks(test_client):
         name="Webhook Shop",
         platform="shopify",
         platform_domain="webhook-shop.myshopify.com",
-        webhook_secret="supersecretwebhookkey",
         index_status="ready"
     )
     db.add(store)
@@ -138,20 +163,29 @@ def test_shopify_webhooks(test_client):
     }
 
     # Post update webhook
+    update_body = json.dumps(product_update_payload, separators=(",", ":")).encode()
+    update_signature = base64.b64encode(
+        hmac.new(settings.SHOPIFY_CLIENT_SECRET.encode(), update_body, hashlib.sha256).digest()
+    ).decode()
     headers = {
         "X-Shopify-Shop-Domain": "webhook-shop.myshopify.com",
         "X-Shopify-Topic": "products/update",
-        "X-Shopify-Hmac-Sha256": "mock_hmac_signature",
+        "X-Shopify-Hmac-Sha256": update_signature,
+        "X-Shopify-Webhook-Id": "webhook-update-112233",
         "Content-Type": "application/json"
     }
     
     webhook_resp = test_client.post(
         "/api/v1/webhooks/shopify",
-        json=product_update_payload,
+        content=update_body,
         headers=headers
     )
     assert webhook_resp.status_code == 200
     event_id = webhook_resp.json()["event_id"]
+    duplicate_resp = test_client.post(
+        "/api/v1/webhooks/shopify", content=update_body, headers=headers
+    )
+    assert duplicate_resp.json()["status"] == "duplicate"
 
     db = TestingSessionLocal()
     # Verify WebhookEvent status
@@ -160,7 +194,10 @@ def test_shopify_webhooks(test_client):
     assert event.status == "completed"
 
     # Verify Product in Database
-    prod = db.query(Product).filter(Product.store_id == store_id, Product.id == "112233").first()
+    prod = db.query(Product).filter(
+        Product.store_id == store_id,
+        Product.external_id == "112233",
+    ).first()
     assert prod is not None
     assert prod.title == "Shiny New Shoes"
     assert float(prod.price) == 99.99
@@ -178,17 +215,25 @@ def test_shopify_webhooks(test_client):
         "id": 112233
     }
     headers["X-Shopify-Topic"] = "products/delete"
+    headers["X-Shopify-Webhook-Id"] = "webhook-delete-112233"
+    delete_body = json.dumps(product_delete_payload, separators=(",", ":")).encode()
+    headers["X-Shopify-Hmac-Sha256"] = base64.b64encode(
+        hmac.new(settings.SHOPIFY_CLIENT_SECRET.encode(), delete_body, hashlib.sha256).digest()
+    ).decode()
     
     delete_resp = test_client.post(
         "/api/v1/webhooks/shopify",
-        json=product_delete_payload,
+        content=delete_body,
         headers=headers
     )
     assert delete_resp.status_code == 200
     
     db = TestingSessionLocal()
     # Verify deleted in Postgres
-    deleted_prod = db.query(Product).filter(Product.store_id == store_id, Product.id == "112233").first()
+    deleted_prod = db.query(Product).filter(
+        Product.store_id == store_id,
+        Product.external_id == "112233",
+    ).first()
     assert deleted_prod is None
     
     # Verify deleted in ChromaDB

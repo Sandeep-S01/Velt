@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/useAuth';
 import { LandingPage } from './pages/LandingPage';
 import { Login } from './pages/Auth/Login';
 import { Signup } from './pages/Auth/Signup';

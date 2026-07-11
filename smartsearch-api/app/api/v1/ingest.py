@@ -4,10 +4,9 @@ API routes for bulk product ingestion.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
-from app.utils.security import verify_api_key
+from app.utils.security import require_api_key_scope, verify_api_key
 from app.models.schemas import IngestRequest, IngestResponse
 from app.services.product_service import get_product, create_product, update_product
 from app.models.schemas import ProductCreate, ProductUpdate
@@ -31,6 +30,7 @@ def ingest_products(
     Requires a valid API key.
     """
     api_key, store = api_key_info
+    require_api_key_scope(api_key, "ingest")
 
     # Verify that the store_id in the request matches the store associated with the API key
     if str(store.id) != request.store_id:
@@ -46,16 +46,21 @@ def ingest_products(
 
     for product_in in request.products:
         try:
-            product_dict = product_in.dict()
+            product_dict = product_in.model_dump()
             product_dict["store_id"] = request.store_id
             product_dict["is_active"] = True  # Default to active on ingestion
 
             # Upsert into PostgreSQL DB
-            db_product = get_product(db, product_id=product_in.id)
+            db_product = get_product(db, product_id=product_in.id, store_id=request.store_id)
             if db_product:
                 # Update
                 update_data = ProductUpdate(**product_dict)
-                update_product(db, product_id=product_in.id, product=update_data)
+                update_product(
+                    db,
+                    product_id=product_in.id,
+                    product=update_data,
+                    store_id=request.store_id,
+                )
             else:
                 # Create
                 create_data = ProductCreate(**product_dict)

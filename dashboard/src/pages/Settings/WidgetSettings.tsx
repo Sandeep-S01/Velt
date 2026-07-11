@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Layout } from '../../components/Layout';
@@ -45,7 +45,7 @@ export const WidgetSettings: React.FC = () => {
   const [borderRadius, setBorderRadius] = useState<'sm' | 'md' | 'lg'>('md');
   const [themePreset, setThemePreset] = useState<'minimal' | 'modern' | 'brand'>('modern');
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     if (!storeId) return;
     try {
       const storeData = await api.get<StoreModel>(`/stores/${storeId}`);
@@ -63,23 +63,23 @@ export const WidgetSettings: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
       const data = await api.get<StoreModel[]>('/stores/');
       setStores(data);
     } catch (err) {
       console.error('Failed to load stores list', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (storeId) {
       fetchConfig();
       fetchStores();
     }
-  }, [storeId]);
+  }, [fetchConfig, fetchStores, storeId]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,0 +1,35 @@
+services:
+  migrate:
+    build:
+      context: ..
+    command: ["alembic", "upgrade", "head"]
+    env_file: ../.env.production
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+    env_file: ../.env.production
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - chroma_data:/data/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: ..
+    env_file: ../.env.production
+    command: ["celery", "-A", "app.tasks.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    volumes:
+      - chroma_data:/data/chroma
+    restart: unless-stopped
+
+volumes:
+  chroma_data:

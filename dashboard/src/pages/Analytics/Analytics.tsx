@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Layout } from '../../components/Layout';
@@ -16,6 +16,8 @@ interface AnalyticsData {
   top_queries: Array<{ query: string; count: number; clicks?: number }>;
   top_clicked_products: Array<{ title: string; count?: number; click_count?: number }>;
   queries_without_results?: Array<{ query: string; count: number }>;
+  daily_searches: Array<{ date: string; searches: number }>;
+  average_latency_ms: number;
 }
 
 export const Analytics: React.FC = () => {
@@ -28,7 +30,7 @@ export const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     if (!storeId) return;
     try {
       const storeData = await api.get<StoreModel>(`/stores/${storeId}`);
@@ -41,23 +43,23 @@ export const Analytics: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
       const data = await api.get<StoreModel[]>('/stores/');
       setStores(data);
     } catch (err) {
       console.error('Failed to load stores list', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (storeId) {
       fetchAnalytics();
       fetchStores();
     }
-  }, [storeId]);
+  }, [fetchAnalytics, fetchStores, storeId]);
 
   if (loading) {
     return (
@@ -87,25 +89,24 @@ export const Analytics: React.FC = () => {
     );
   }
 
-  // Pre-configured mock timeline database for sparkline charts
-  const mockTimelinePoints = [
-    { label: 'Mon', searches: Math.round(data.total_searches * 0.1) || 5 },
-    { label: 'Tue', searches: Math.round(data.total_searches * 0.15) || 12 },
-    { label: 'Wed', searches: Math.round(data.total_searches * 0.22) || 28 },
-    { label: 'Thu', searches: Math.round(data.total_searches * 0.18) || 15 },
-    { label: 'Fri', searches: Math.round(data.total_searches * 0.25) || 35 },
-    { label: 'Sat', searches: Math.round(data.total_searches * 0.2) || 20 },
-    { label: 'Sun', searches: Math.round(data.total_searches * 0.3) || 42 },
-  ];
+  const measuredTimeline = data.daily_searches.slice(-7).map((point) => ({
+    label: new Date(`${point.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' }),
+    searches: point.searches,
+  }));
+  const timelinePoints = measuredTimeline.length >= 2
+    ? measuredTimeline
+    : measuredTimeline.length === 1
+      ? [...measuredTimeline, { label: '', searches: 0 }]
+      : [{ label: 'No data', searches: 0 }, { label: '', searches: 0 }];
 
   // SVG Chart path calculation
   const chartHeight = 140;
   const chartWidth = 600;
   const padding = 25;
-  const maxVal = Math.max(...mockTimelinePoints.map(p => p.searches), 10);
+  const maxVal = Math.max(...timelinePoints.map(p => p.searches), 1);
   
-  const points = mockTimelinePoints.map((point, index) => {
-    const x = padding + (index * (chartWidth - padding * 2)) / (mockTimelinePoints.length - 1);
+  const points = timelinePoints.map((point, index) => {
+    const x = padding + (index * (chartWidth - padding * 2)) / (timelinePoints.length - 1);
     const y = chartHeight - padding - (point.searches * (chartHeight - padding * 2)) / maxVal;
     return { x, y, ...point };
   });
@@ -144,7 +145,7 @@ export const Analytics: React.FC = () => {
                 <Search className="w-4 h-4" />
               </div>
               <span className="text-[10px] text-green-600 font-extrabold bg-green-50 border border-green-150 px-1.5 py-0.5 rounded">
-                +18.2%
+                Measured
               </span>
             </div>
             <div className="space-y-1">
@@ -160,7 +161,7 @@ export const Analytics: React.FC = () => {
                 <MousePointerClick className="w-4 h-4" />
               </div>
               <span className="text-[10px] text-green-600 font-extrabold bg-green-50 border border-green-150 px-1.5 py-0.5 rounded">
-                +4.5%
+                Observed
               </span>
             </div>
             <div className="space-y-1">
@@ -194,12 +195,12 @@ export const Analytics: React.FC = () => {
                 <Zap className="w-4 h-4" />
               </div>
               <span className="text-[10px] text-blue-600 font-extrabold bg-blue-50 border border-blue-150 px-1.5 py-0.5 rounded">
-                99.9% uptime
+                Measured
               </span>
             </div>
             <div className="space-y-1">
               <span className="text-[10px] text-neutral-mediumgray uppercase font-bold tracking-wider block">Avg Vector Latency</span>
-              <span className="text-2xl font-black text-neutral-charcoal tracking-tight">38 <span className="text-xs font-extrabold text-neutral-mediumgray">ms</span></span>
+              <span className="text-2xl font-black text-neutral-charcoal tracking-tight">{data.average_latency_ms.toFixed(0)} <span className="text-xs font-extrabold text-neutral-mediumgray">ms</span></span>
             </div>
           </div>
         </div>
@@ -262,19 +263,23 @@ export const Analytics: React.FC = () => {
                 <div className="flex gap-2">
                   <Lightbulb className="w-4 h-4 text-brand-light shrink-0 mt-0.5" />
                   <p className="text-xs text-slate-200">
-                    Shoppers frequently query <strong className="text-brand-light">"winter apparel"</strong> but catalog match rates are currently low.
+                    {data.queries_without_results?.[0]
+                      ? <>Most frequent zero-result query: <strong className="text-brand-light">"{data.queries_without_results[0].query}"</strong>.</>
+                      : 'No zero-result recommendation is available yet.'}
                   </p>
                 </div>
                 <p className="text-[11px] text-slate-400 pl-6">
-                  Recommendation: Consider expanding keywords, tag definitions, or price adjustments on heavy outerwear in your source files to boost conversion relevance by up to 14%.
+                  {data.queries_without_results?.[0]
+                    ? 'Review the catalog wording or add a relevant product before changing the search threshold.'
+                    : 'More shopper searches are required before generating a recommendation.'}
                 </p>
               </div>
             </div>
 
             <div className="bg-slate-850/60 border border-slate-800/80 p-3 rounded-xl">
-              <span className="text-[10px] text-slate-400 font-bold block mb-1">AUTOMATED ACTIONS</span>
+              <span className="text-[10px] text-slate-400 font-bold block mb-1">DATA POLICY</span>
               <p className="text-[10px] text-slate-300">
-                Vector indexes auto-rebalance based on top clicks daily to prioritize high-CTR intent paths.
+                Recommendations are derived only from recorded zero-result searches. Rankings are not automatically modified.
               </p>
             </div>
           </div>

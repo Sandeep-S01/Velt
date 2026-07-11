@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, API_BASE_URL } from '../../lib/api';
 
@@ -11,7 +11,8 @@ import {
 
 interface APIKeyModel {
   id: number;
-  key: string;
+  key?: string;
+  key_prefix: string;
   name: string;
   is_active: boolean;
   created_at: string;
@@ -39,7 +40,7 @@ export const ApiKeys: React.FC = () => {
   const [showKeys, setShowKeys] = useState<Record<number, boolean>>({});
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
-  const fetchStoreData = async () => {
+  const fetchStoreData = useCallback(async () => {
     if (!storeId) return;
     try {
       const data = await api.get<StoreModel>(`/stores/${storeId}`);
@@ -49,18 +50,18 @@ export const ApiKeys: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
       const data = await api.get<StoreModel[]>('/stores/');
       setStores(data);
     } catch (err) {
       console.error('Failed to load stores list', err);
     }
-  };
+  }, []);
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     if (!storeId) return;
     try {
       setKeysLoading(true);
@@ -71,7 +72,7 @@ export const ApiKeys: React.FC = () => {
     } finally {
       setKeysLoading(false);
     }
-  };
+  }, [storeId]);
 
   useEffect(() => {
     if (storeId) {
@@ -79,7 +80,7 @@ export const ApiKeys: React.FC = () => {
       fetchApiKeys();
       fetchStores();
     }
-  }, [storeId]);
+  }, [fetchApiKeys, fetchStoreData, fetchStores, storeId]);
 
   const handleGenerateKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,7 +151,7 @@ export const ApiKeys: React.FC = () => {
       </Layout>
     );
   }
-  const primaryApiKey = apiKeys[0]?.key || 'vt_live_pk_********************';
+  const primaryApiKey = 'ss_live_REPLACE_WITH_NEW_KEY';
 
   return (
     <Layout stores={stores} selectedStoreId={store.id}>
@@ -244,7 +245,7 @@ export const ApiKeys: React.FC = () => {
                         <td className="px-6 py-4 font-mono text-[10.5px]">
                           <div className="flex items-center gap-2">
                             <div className="bg-slate-50 border border-slate-200/80 px-2 py-1 rounded text-slate-700 select-all overflow-x-auto max-w-xs md:max-w-sm">
-                              {isShown ? keyObj.key : `vt_live_pk_${keyObj.key.slice(11, 15)}*******************`}
+                              {isShown && keyObj.key ? keyObj.key : `${keyObj.key_prefix}************************`}
                             </div>
                             <button
                               onClick={() => toggleShowKey(keyObj.id)}
@@ -254,9 +255,10 @@ export const ApiKeys: React.FC = () => {
                               {isShown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                             </button>
                             <button
-                              onClick={() => triggerCopy(keyObj.key, `key-${keyObj.id}`)}
+                              onClick={() => keyObj.key && triggerCopy(keyObj.key, `key-${keyObj.id}`)}
+                              disabled={!keyObj.key}
                               className="p-1 hover:bg-slate-150 rounded border border-slate-200 bg-white text-neutral-mediumgray hover:text-slate-800 transition-all cursor-pointer shrink-0"
-                              title="Copy Key to Clipboard"
+                              title={keyObj.key ? 'Copy newly generated key' : 'Keys are shown only once'}
                             >
                               {copiedText === `key-${keyObj.id}` ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
                             </button>

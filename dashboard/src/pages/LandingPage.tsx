@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { getApiDocsUrl, WIDGET_SCRIPT_URL } from '../lib/api';
 import {
   ArrowRight,
@@ -150,7 +150,7 @@ export const LandingPage: React.FC = () => {
     },
     {
       q: "Do I need machine learning knowledge?",
-      a: "No machine learning knowledge is required. We provide a pre-trained, production-ready vector inference pipeline out of the box, along with a visual widget settings builder and analytics console."
+      a: "No machine learning knowledge is required. Velt provides a managed vector-search pipeline, widget settings builder, and analytics console."
     },
     {
       q: "How fast can I deploy Velt?",
@@ -552,7 +552,7 @@ export const LandingPage: React.FC = () => {
                   </div>
                   <div className="flex flex-wrap justify-center lg:justify-start gap-1.5 pt-2">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-background border border-neutral-lightgray text-neutral-darkgray">ChromaDB Store</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-background border border-neutral-lightgray text-neutral-darkgray">&lt; 30ms latency</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-background border border-neutral-lightgray text-neutral-darkgray">Measured latency</span>
                   </div>
                 </div>
 
@@ -931,17 +931,17 @@ export const LandingPage: React.FC = () => {
                 <div className="bg-neutral-background border border-neutral-lightgray/60 p-4.5 rounded-2xl">
                   <div className="text-[10px] font-extrabold text-neutral-mediumgray uppercase">Avg Search Latency</div>
                   <div className="text-xl font-black text-neutral-charcoal mt-1">24ms</div>
-                  <span className="text-[9px] font-bold text-green-600 mt-1 block">Sub-30ms guarantee</span>
+                  <span className="text-[9px] font-bold text-neutral-mediumgray mt-1 block">Measured per search</span>
                 </div>
                 <div className="bg-neutral-background border border-neutral-lightgray/60 p-4.5 rounded-2xl">
                   <div className="text-[10px] font-extrabold text-neutral-mediumgray uppercase">Zero-Result Queries</div>
                   <div className="text-xl font-black text-neutral-charcoal mt-1">0.8%</div>
-                  <span className="text-[9px] font-bold text-green-600 mt-1 block">↓ 92% decrease</span>
+                  <span className="text-[9px] font-bold text-neutral-mediumgray mt-1 block">Based on recorded searches</span>
                 </div>
                 <div className="bg-neutral-background border border-neutral-lightgray/60 p-4.5 rounded-2xl">
-                  <div className="text-[10px] font-extrabold text-neutral-mediumgray uppercase">Conversion Increase</div>
-                  <div className="text-xl font-black text-neutral-charcoal mt-1">+22.4%</div>
-                  <span className="text-[9px] font-bold text-green-600 mt-1 block">↑ 4.1% this week</span>
+                  <div className="text-[10px] font-extrabold text-neutral-mediumgray uppercase">Click-Through Rate</div>
+                  <div className="text-xl font-black text-neutral-charcoal mt-1">Measured</div>
+                  <span className="text-[9px] font-bold text-neutral-mediumgray mt-1 block">From attributed result clicks</span>
                 </div>
                 <div className="bg-neutral-background border border-neutral-lightgray/60 p-4.5 rounded-2xl col-span-2 lg:col-span-1">
                   <div className="text-[10px] font-extrabold text-neutral-mediumgray uppercase">Active Ingestion Sync</div>
@@ -1069,7 +1069,7 @@ export const LandingPage: React.FC = () => {
                     <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Dedicated vector DB cluster</li>
                     <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Custom ML synonym tuning</li>
                     <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Dedicated support manager</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> 99.9% API uptime SLA</li>
+                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Priority support and usage reporting</li>
                   </ul>
                 </div>
 
@@ -1224,7 +1224,7 @@ export const LandingPage: React.FC = () => {
                 <span className="text-lg font-extrabold text-neutral-charcoal">Velt</span>
               </Link>
               <p className="text-xs font-semibold text-neutral-mediumgray max-w-sm leading-relaxed">
-                The AI-powered semantic search infrastructure for modern storefronts. Connect your catalog and deploy under 30ms latency vector indexes instantly.
+                Semantic search infrastructure for modern storefronts. Connect your catalog, deploy the widget, and measure real search performance.
               </p>
             </div>
 

@@ -6,12 +6,18 @@ import io
 import pandas as pd
 from typing import List, Dict, Any
 
+MAX_PRODUCTS_PER_FILE = 50_000
+MAX_TITLE_LENGTH = 500
+MAX_DESCRIPTION_LENGTH = 20_000
+
 def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
     """
     Parse CSV bytes, map headers dynamically to match schema standard, and clean row data.
     """
     content = csv_bytes.decode('utf-8', errors='ignore')
     df = pd.read_csv(io.StringIO(content))
+    if len(df.index) > MAX_PRODUCTS_PER_FILE:
+        raise ValueError(f"Catalog exceeds {MAX_PRODUCTS_PER_FILE} product limit")
     
     # Mapping table mapping lowercase variants to standardized database columns
     col_map = {}
@@ -42,21 +48,25 @@ def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
     
     products = []
     for idx, row in df.iterrows():
-        p_id = str(row.get('id', '')).strip()
-        if not p_id or pd.isna(p_id):
-            p_id = f"row_{idx}"
+        raw_id = row.get('id')
+        if pd.isna(raw_id) or not str(raw_id).strip():
+            continue
+        p_id = str(raw_id).strip()[:255]
             
-        title = str(row.get('title', '')).strip()
-        if not title or pd.isna(title):
+        raw_title = row.get('title')
+        if pd.isna(raw_title) or not str(raw_title).strip():
             # Skip row if title is completely missing
             continue
+        title = str(raw_title).strip()[:MAX_TITLE_LENGTH]
             
         price_val = row.get('price')
         price = float(price_val) if pd.notna(price_val) and price_val != "" else None
+        if price is not None and price < 0:
+            raise ValueError(f"Negative price for product {p_id}")
         
         inventory_val = row.get('inventory_count', 0)
         try:
-            inventory = int(float(inventory_val)) if pd.notna(inventory_val) else 0
+            inventory = max(0, int(float(inventory_val))) if pd.notna(inventory_val) else 0
         except ValueError:
             inventory = 0
             
@@ -74,7 +84,7 @@ def parse_products_csv(csv_bytes: bytes) -> List[Dict[str, Any]]:
         product = {
             "id": p_id,
             "title": title,
-            "description": str(row.get('description', '')) if pd.notna(row.get('description')) else None,
+            "description": str(row.get('description', ''))[:MAX_DESCRIPTION_LENGTH] if pd.notna(row.get('description')) else None,
             "price": price,
             "category": str(row.get('category', '')) if pd.notna(row.get('category')) else None,
             "brand": str(row.get('brand', '')) if pd.notna(row.get('brand')) else None,

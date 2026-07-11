@@ -16,7 +16,7 @@ app.core.database.get_redis = lambda: None
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.search_engine import SemanticSearchEngine
-from app.models.database import APIKey, Store, Product
+from app.models.database import Product
 from tests.conftest import engine, TestingSessionLocal
 
 # Create a temporary directory for test ChromaDB
@@ -69,7 +69,6 @@ def test_full_api_workflow(client):
         }
     )
     assert register_response.status_code == 200
-    user_id = register_response.json()["id"]
     assert register_response.json()["email"] == "merchant@example.com"
     
     # 2. Login to get JWT
@@ -99,18 +98,17 @@ def test_full_api_workflow(client):
     assert store_response.status_code == 200
     store_id = store_response.json()["id"]
     
-    # 4. Generate an API Key for this store manually in DB for testing
-    db = TestingSessionLocal()
-    api_key_str = "ss_live_joe_test_api_key_123"
-    api_key_obj = APIKey(
-        key=api_key_str,
-        store_id=store_id,
-        name="Test Ingest Key",
-        is_active=True
+    # 4. Generate an API key. The secret is returned once and never listed again.
+    key_response = client.post(
+        f"/api/v1/stores/{store_id}/keys",
+        json={"name": "Test Ingest Key", "scopes": ["search", "ingest"]},
+        headers=headers,
     )
-    db.add(api_key_obj)
-    db.commit()
-    db.close()
+    assert key_response.status_code == 200
+    api_key_str = key_response.json()["key"]
+    listed_keys = client.get(f"/api/v1/stores/{store_id}/keys", headers=headers)
+    assert listed_keys.status_code == 200
+    assert "key" not in listed_keys.json()[0]
     
     # 5. Ingest products via JSON payload using API Key header authentication
     ingest_headers = {"X-API-Key": api_key_str}
@@ -189,3 +187,37 @@ def test_full_api_workflow(client):
     assert len(results_query) >= 1
     # Green tea should rank first
     assert results_query[0]["id"] == "p3"
+
+    # 10. A second merchant cannot access this store or its resources.
+    other_register = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other@example.com",
+            "full_name": "Other Merchant",
+            "password": "securepassword456",
+        },
+    )
+    assert other_register.status_code == 200
+    other_login = client.post(
+        "/api/v1/auth/token",
+        data={"username": "other@example.com", "password": "securepassword456"},
+    )
+    assert other_login.status_code == 200
+    other_headers = {
+        "Authorization": f"Bearer {other_login.json()['access_token']}"
+    }
+
+    assert client.get(f"/api/v1/stores/{store_id}", headers=other_headers).status_code == 404
+    assert client.get(
+        f"/api/v1/products/store/{store_id}", headers=other_headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/analytics/{store_id}", headers=other_headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/stores/{store_id}/keys", headers=other_headers
+    ).status_code == 404
+    assert all(
+        store["id"] != store_id
+        for store in client.get("/api/v1/stores/", headers=other_headers).json()
+    )

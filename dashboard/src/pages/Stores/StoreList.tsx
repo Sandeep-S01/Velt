@@ -18,10 +18,10 @@ import {
 
 export interface StoreModel {
   id: string;
+  widget_token: string;
   name: string;
   platform: string;
   platform_store_id?: string;
-  webhook_secret?: string;
   is_active: boolean;
   sync_frequency_hours: number;
   last_sync_at?: string;

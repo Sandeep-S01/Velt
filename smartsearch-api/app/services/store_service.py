@@ -14,13 +14,16 @@ def get_store_by_name(db: Session, name: str):
     """Get a store by name."""
     return db.query(Store).filter(Store.name == name).first()
 
-def get_stores(db: Session, skip: int = 0, limit: int = 100):
+def get_stores(db: Session, skip: int = 0, limit: int = 100, owner_user_id: str | None = None):
     """Get multiple stores with pagination."""
-    return db.query(Store).offset(skip).limit(limit).all()
+    query = db.query(Store)
+    if owner_user_id is not None:
+        query = query.filter(Store.owner_user_id == owner_user_id)
+    return query.offset(skip).limit(limit).all()
 
-def create_store(db: Session, store: StoreCreate):
+def create_store(db: Session, store: StoreCreate, owner_user_id: str | None = None):
     """Create a new store."""
-    db_store = Store(**store.dict())
+    db_store = Store(**store.model_dump(), owner_user_id=owner_user_id)
     db.add(db_store)
     db.commit()
     db.refresh(db_store)
@@ -30,7 +33,7 @@ def update_store(db: Session, store_id: str, store: StoreUpdate):
     """Update an existing store."""
     db_store = db.query(Store).filter(Store.id == store_id).first()
     if db_store:
-        update_data = store.dict(exclude_unset=True)
+        update_data = store.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_store, field, value)
         db.commit()

@@ -1,6 +1,6 @@
 # Velt — AI-Powered Storefront Semantic Search Engine
 
-Velt is a complete, production-ready AI SaaS product that replaces traditional keyword-matching search bars in eCommerce storefronts with a semantic, vector-based AI search. 
+Velt is an MVP AI SaaS product under production hardening that replaces traditional keyword-matching search bars in eCommerce storefronts with semantic, vector-based search.
 
 By mapping shopper search intents to catalog product descriptions rather than exact spelling tags, Velt helps merchants increase search conversions, understand user search traffic trends, and capture revenue from zero-result queries.
 
@@ -69,6 +69,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Development and test tooling
+pip install -r requirements-dev.txt
 ```
 
 Create a `.env` file in the `smartsearch-api` root:

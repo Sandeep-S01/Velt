@@ -2,13 +2,13 @@
 Database integration tests.
 """
 
-import pytest
 from sqlalchemy.orm import Session
-from app.models.database import Store, Product, APIKey, User, SearchQueryLog
+from app.models.database import APIKey, SearchQueryLog
 from app.services.store_service import create_store, get_store, get_stores, update_store, delete_store
 from app.services.product_service import create_product, get_product, get_products_by_store, update_product, delete_product
-from app.services.user_service import create_user, get_user, get_users, update_user, delete_user, authenticate_user
+from app.services.user_service import create_user, get_user, get_users, update_user, delete_user
 from app.models.schemas import StoreCreate, StoreUpdate, ProductCreate, ProductUpdate, UserCreate, UserUpdate
+from app.utils.security import api_key_prefix, hash_api_key
 
 
 def test_store_crud_operations(db_session: Session):
@@ -69,7 +69,8 @@ def test_product_crud_operations(db_session: Session):
         is_active=True
     )
     db_product = create_product(db_session, product_data)
-    assert db_product.id == "product_123"
+    assert db_product.id != "product_123"
+    assert db_product.external_id == "product_123"
     assert db_product.store_id == db_store.id
     assert db_product.title == "Test Product"
 
@@ -167,7 +168,7 @@ def test_model_relationships(db_session: Session):
 
     # Test store -> products relationship
     assert len(db_store.products) == 2
-    product_ids = [p.id for p in db_store.products]
+    product_ids = [p.external_id for p in db_store.products]
     assert "product_1" in product_ids
     assert "product_2" in product_ids
 
@@ -176,6 +177,32 @@ def test_model_relationships(db_session: Session):
     assert db_product_2.store.id == db_store.id
     assert db_product_1.store.name == "Relationship Test Store"
     assert db_product_2.store.name == "Relationship Test Store"
+
+
+def test_external_product_ids_are_unique_per_store(db_session: Session):
+    """Different stores can safely use the same platform product ID."""
+    first_store = create_store(
+        db_session,
+        StoreCreate(name="First Store", platform="custom", is_active=True),
+    )
+    second_store = create_store(
+        db_session,
+        StoreCreate(name="Second Store", platform="custom", is_active=True),
+    )
+
+    first_product = create_product(
+        db_session,
+        ProductCreate(id="shared-sku", store_id=first_store.id, title="First Product"),
+    )
+    second_product = create_product(
+        db_session,
+        ProductCreate(id="shared-sku", store_id=second_store.id, title="Second Product"),
+    )
+
+    assert first_product.id != second_product.id
+    assert first_product.external_id == second_product.external_id == "shared-sku"
+    assert get_product(db_session, "shared-sku", first_store.id).id == first_product.id
+    assert get_product(db_session, "shared-sku", second_store.id).id == second_product.id
 
 
 def test_api_key_model(db_session: Session):
@@ -190,9 +217,11 @@ def test_api_key_model(db_session: Session):
 
     # Create API key
     api_key = APIKey(
-        key="test_api_key_12345",
+        key_hash=hash_api_key("test_api_key_12345"),
+        key_prefix=api_key_prefix("test_api_key_12345"),
         store_id=db_store.id,
         name="Test Key",
+        scopes="search",
         is_active=True
     )
     db_session.add(api_key)
@@ -200,7 +229,8 @@ def test_api_key_model(db_session: Session):
     db_session.refresh(api_key)
 
     assert api_key.id is not None
-    assert api_key.key == "test_api_key_12345"
+    assert api_key.key is None
+    assert api_key.key_hash == hash_api_key("test_api_key_12345")
     assert api_key.store_id == db_store.id
     assert api_key.name == "Test Key"
     assert api_key.is_active is True

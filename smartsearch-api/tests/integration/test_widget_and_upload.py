@@ -16,9 +16,10 @@ app.core.database.get_redis = lambda: None
 from app.main import app
 from app.core.database import get_db, Base
 from app.core.search_engine import SemanticSearchEngine
-from app.models.database import Store, Product, SearchQueryLog, APIKey, User
+from app.models.database import APIKey, Product, SearchClickEvent, SearchQueryLog, Store
 from tests.conftest import engine, TestingSessionLocal
 from app.core.config import settings
+from app.utils.security import api_key_prefix, hash_api_key
 
 TEST_CHROMA_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_widget_chroma_db"))
 settings.CHROMA_DB_PATH = TEST_CHROMA_DB_PATH
@@ -68,8 +69,6 @@ def test_upload_and_widget_flow(test_client):
         }
     )
     assert register_response.status_code == 200
-    user_id = register_response.json()["id"]
-    
     # 2. Login to get JWT
     login_response = test_client.post(
         "/api/v1/auth/token",
@@ -100,9 +99,11 @@ def test_upload_and_widget_flow(test_client):
     db = TestingSessionLocal()
     api_key_str = "ss_live_widget_test_api_key_456"
     api_key_obj = APIKey(
-        key=api_key_str,
+        key_hash=hash_api_key(api_key_str),
+        key_prefix=api_key_prefix(api_key_str),
         store_id=store_id,
         name="Widget Test Key",
+        scopes="search,ingest",
         is_active=True
     )
     db.add(api_key_obj)
@@ -127,6 +128,15 @@ def test_upload_and_widget_flow(test_client):
     )
     assert upload_response.status_code == 200
     assert upload_response.json()["status"] == "success"
+    assert "products.csv" not in upload_response.json()["file_key"]
+
+    oversized_response = test_client.post(
+        "/api/v1/upload",
+        data={"store_id": store_id},
+        files={"file": ("large.csv", b"x" * (10 * 1024 * 1024 + 1), "text/csv")},
+        headers=api_headers,
+    )
+    assert oversized_response.status_code == 413
     
     # Verify products exist in Postgres
     db = TestingSessionLocal()
@@ -138,27 +148,58 @@ def test_upload_and_widget_flow(test_client):
     store = db.query(Store).filter(Store.id == store_id).first()
     assert store.index_status == "ready"
     assert store.indexed_product_count == 2
+    widget_headers = {"X-Widget-Token": store.widget_token}
     db.close()
 
     # 6. Test Widget Config Endpoint
-    config_resp = test_client.get(f"/api/v1/widget/config/{store_id}")
+    config_resp = test_client.get(
+        f"/api/v1/widget/config/{store_id}", headers=widget_headers
+    )
     assert config_resp.status_code == 200
     assert config_resp.json()["primary_color"] == "#4F46E5"
+    assert test_client.get(
+        f"/api/v1/widget/config/{store_id}",
+        headers={"X-Widget-Token": "invalid-widget-token"},
+    ).status_code == 404
+
+    db = TestingSessionLocal()
+    store = db.query(Store).filter(Store.id == store_id).first()
+    store.widget_config = {
+        "primary_color": "red;}</style><script>alert(1)</script>",
+        "placeholder_text": '" onfocus="alert(1)',
+        "position": "fixed;top:0",
+    }
+    db.commit()
+    db.close()
+    sanitized_config = test_client.get(
+        f"/api/v1/widget/config/{store_id}", headers=widget_headers
+    ).json()
+    assert sanitized_config["primary_color"] == "#4F46E5"
+    assert sanitized_config["position"] == "bottom-right"
 
     # 7. Test Widget Search Endpoint
     search_resp = test_client.post(
         "/api/v1/widget/search",
-        json={"store_id": store_id, "query": "listening to music without cables", "limit": 2}
+        json={"store_id": store_id, "query": "listening to music without cables", "limit": 1},
+        headers=widget_headers,
     )
     assert search_resp.status_code == 200
     results = search_resp.json()
     assert len(results) >= 1
     assert results[0]["id"] == "item_1"
     assert results[0]["title"] == "Wireless Bluetooth Headset"
+    query_event_token = search_resp.headers["X-Query-Event-Token"]
+    oversized_search = test_client.post(
+        "/api/v1/widget/search",
+        json={"store_id": store_id, "query": "x" * 201, "limit": 2},
+        headers=widget_headers,
+    )
+    assert oversized_search.status_code == 422
 
     # 8. Test Autocomplete Endpoint
     autocomplete_resp = test_client.get(
-        f"/api/v1/widget/autocomplete?store_id={store_id}&query=wireless"
+        f"/api/v1/widget/autocomplete?store_id={store_id}&query=wireless",
+        headers=widget_headers,
     )
     assert autocomplete_resp.status_code == 200
     suggestions = autocomplete_resp.json()["suggestions"]
@@ -170,14 +211,23 @@ def test_upload_and_widget_flow(test_client):
     query_log = db.query(SearchQueryLog).filter(SearchQueryLog.store_id == store_id).first()
     assert query_log is not None
     assert query_log.query == "listening to music without cables"
-    query_log_id = query_log.id
+    assert query_log.event_token == query_event_token
     db.close()
 
     # Log click event
+    forged_click = test_client.post(
+        "/api/v1/analytics/click",
+        json={
+            "query_event_token": query_event_token,
+            "clicked_product_id": "item_2",
+        },
+    )
+    assert forged_click.status_code == 400
+
     click_resp = test_client.post(
         "/api/v1/analytics/click",
         json={
-            "query_log_id": query_log_id,
+            "query_event_token": query_event_token,
             "clicked_product_id": "item_1"
         }
     )
@@ -186,9 +236,25 @@ def test_upload_and_widget_flow(test_client):
 
     # Verify Click in DB
     db = TestingSessionLocal()
-    updated_query_log = db.query(SearchQueryLog).filter(SearchQueryLog.id == query_log_id).first()
-    assert updated_query_log.clicked_product_id == "item_1"
+    click_event = db.query(SearchClickEvent).join(SearchQueryLog).filter(
+        SearchQueryLog.event_token == query_event_token
+    ).first()
+    assert click_event.product_external_id == "item_1"
     db.close()
+
+    # A strict relevance threshold must produce a genuine zero-result event.
+    db = TestingSessionLocal()
+    store = db.query(Store).filter(Store.id == store_id).first()
+    store.search_config = {"min_score_threshold": 1.0}
+    db.commit()
+    db.close()
+    zero_result_resp = test_client.post(
+        "/api/v1/widget/search",
+        json={"store_id": store_id, "query": "completely unrelated intent", "limit": 2},
+        headers=widget_headers,
+    )
+    assert zero_result_resp.status_code == 200
+    assert zero_result_resp.json() == []
 
     # 10. Fetch dashboard analytics using dashboard authenticated user session
     analytics_resp = test_client.get(
@@ -197,7 +263,11 @@ def test_upload_and_widget_flow(test_client):
     )
     assert analytics_resp.status_code == 200
     analytics_data = analytics_resp.json()
-    assert analytics_data["total_searches"] == 1
-    assert analytics_data["click_through_rate"] == 1.0
+    assert analytics_data["total_searches"] == 2
+    assert analytics_data["no_results_count"] == 1
+    assert analytics_data["click_through_rate"] == 0.5
     assert analytics_data["top_queries"][0]["query"] == "listening to music without cables"
     assert analytics_data["top_clicked_products"][0]["title"] == "Wireless Bluetooth Headset"
+    assert analytics_data["queries_without_results"][0]["query"] == "completely unrelated intent"
+    assert analytics_data["daily_searches"][0]["searches"] == 2
+    assert analytics_data["average_latency_ms"] >= 0

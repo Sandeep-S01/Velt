@@ -10,11 +10,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.config import settings
+from app.integrations.shopify import normalize_shop_domain
 from app.models.database import Store, WebhookEvent
 from app.tasks.sync import process_webhook_event_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+MAX_WEBHOOK_BYTES = 1 * 1024 * 1024
+ALLOWED_TOPICS = {"products/create", "products/update", "products/delete"}
 
 def verify_shopify_hmac(body: bytes, secret: str, hmac_header: str) -> bool:
     """
@@ -36,19 +40,38 @@ async def shopify_webhook(
     Handle webhooks sent by Shopify.
     Verifies the HMAC signature, logs the event to the database, and queues it for background processing.
     """
+    content_length = request.headers.get("Content-Length")
+    if content_length and int(content_length) > MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
     body = await request.body()
+    if len(body) > MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
     
     # Extract headers
     hmac_header = request.headers.get("X-Shopify-Hmac-Sha256")
     topic = request.headers.get("X-Shopify-Topic")  # e.g., 'products/update'
     shop_domain = request.headers.get("X-Shopify-Shop-Domain")
+    webhook_id = request.headers.get("X-Shopify-Webhook-Id")
 
-    if not hmac_header or not topic or not shop_domain:
+    if not hmac_header or not topic or not shop_domain or not webhook_id:
         logger.warning("Shopify webhook request missing required headers")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing required Shopify headers"
         )
+    if topic not in ALLOWED_TOPICS:
+        raise HTTPException(status_code=400, detail="Unsupported Shopify topic")
+    try:
+        shop_domain = normalize_shop_domain(shop_domain)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Shopify shop domain") from exc
+
+    existing = db.query(WebhookEvent).filter(
+        WebhookEvent.source == "shopify",
+        WebhookEvent.external_id == webhook_id,
+    ).first()
+    if existing:
+        return {"status": "duplicate", "event_id": existing.id}
 
     # Locate the store
     store = db.query(Store).filter(
@@ -63,16 +86,12 @@ async def shopify_webhook(
             detail="Store not registered"
         )
 
-    # Validate HMAC signature
-    # Allow mock HMAC for testing
-    if hmac_header != "mock_hmac_signature":
-        is_valid = verify_shopify_hmac(body, store.webhook_secret, hmac_header)
-        if not is_valid:
-            logger.warning(f"Invalid Webhook HMAC signature for shop {shop_domain}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid HMAC signature"
-            )
+    if not verify_shopify_hmac(body, settings.SHOPIFY_CLIENT_SECRET, hmac_header):
+        logger.warning(f"Invalid Webhook HMAC signature for shop {shop_domain}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid HMAC signature"
+        )
 
     # Parse JSON payload
     try:
@@ -88,7 +107,7 @@ async def shopify_webhook(
         store_id=store.id,
         event_type=topic,
         source="shopify",
-        external_id=str(payload.get("id")),
+        external_id=webhook_id,
         payload=payload,
         status="pending"
     )

@@ -4,7 +4,7 @@ Background Celery tasks for product synchronization and webhook processing.
 
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from app.tasks.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.database import Store, Product, WebhookEvent
@@ -69,9 +69,11 @@ def sync_shopify_products_task(store_id: str) -> None:
         # Transform and save products
         products_to_index = []
         indexed_count = 0
+        synced_external_ids = set()
         
         for idx, shopify_product in enumerate(shopify_products):
             ext_id = str(shopify_product["id"])
+            synced_external_ids.add(ext_id)
             title = shopify_product["title"]
             desc = shopify_product.get("body_html") or ""
             
@@ -91,9 +93,12 @@ def sync_shopify_products_task(store_id: str) -> None:
             category = shopify_product.get("product_type")
 
             # Check if exists in db
-            product = db.query(Product).filter(Product.store_id == store_id, Product.id == ext_id).first()
+            product = db.query(Product).filter(
+                Product.store_id == store_id,
+                Product.external_id == ext_id,
+            ).first()
             if not product:
-                product = Product(id=ext_id, store_id=store_id)
+                product = Product(external_id=ext_id, store_id=store_id)
                 db.add(product)
                 
             product.title = title
@@ -120,18 +125,29 @@ def sync_shopify_products_task(store_id: str) -> None:
             
             indexed_count += 1
             
+        stale_products = db.query(Product).filter(
+            Product.store_id == store_id,
+            Product.is_active == True,
+            Product.external_id.notin_(synced_external_ids) if synced_external_ids else True,
+        ).all()
+        stale_external_ids = [product.external_id for product in stale_products]
+        for product in stale_products:
+            product.is_active = False
         db.commit()
 
         # Index in ChromaDB
-        if products_to_index:
+        if products_to_index or stale_external_ids:
             se = get_search_engine()
-            se.index_store_products(store_id=store_id, products=products_to_index)
+            if products_to_index:
+                se.index_store_products(store_id=store_id, products=products_to_index)
+            if stale_external_ids:
+                se.delete_store_products(store_id=store_id, ids=stale_external_ids)
 
         # Update store status
         store.index_status = "ready"
         store.index_progress_percent = 100
         store.indexed_product_count = indexed_count
-        store.last_sync_at = datetime.utcnow()
+        store.last_sync_at = datetime.now(UTC)
         db.commit()
         logger.info(f"Successfully synced {indexed_count} products for store {store_id}")
         
@@ -188,9 +204,12 @@ def process_webhook_event_task(event_id: str) -> None:
             category = payload.get("product_type")
 
             # Update PostgreSQL
-            product = db.query(Product).filter(Product.store_id == store_id, Product.id == ext_id).first()
+            product = db.query(Product).filter(
+                Product.store_id == store_id,
+                Product.external_id == ext_id,
+            ).first()
             if not product:
-                product = Product(id=ext_id, store_id=store_id)
+                product = Product(external_id=ext_id, store_id=store_id)
                 db.add(product)
                 
             product.title = title
@@ -222,7 +241,10 @@ def process_webhook_event_task(event_id: str) -> None:
             ext_id = str(payload["id"])
             
             # Delete from PostgreSQL
-            product = db.query(Product).filter(Product.store_id == store_id, Product.id == ext_id).first()
+            product = db.query(Product).filter(
+                Product.store_id == store_id,
+                Product.external_id == ext_id,
+            ).first()
             if product:
                 db.delete(product)
                 db.commit()
@@ -233,7 +255,7 @@ def process_webhook_event_task(event_id: str) -> None:
 
         # Update webhook status
         event.status = "completed"
-        event.processed_at = datetime.utcnow()
+        event.processed_at = datetime.now(UTC)
         db.commit()
         
     except Exception as e:
@@ -301,9 +323,12 @@ def process_uploaded_file_task(store_id: str, file_key: str, file_type: str) -> 
             is_active = item.get("is_active", True)
             
             # Check if exists in db
-            product = db.query(Product).filter(Product.store_id == store_id, Product.id == ext_id).first()
+            product = db.query(Product).filter(
+                Product.store_id == store_id,
+                Product.external_id == ext_id,
+            ).first()
             if not product:
-                product = Product(id=ext_id, store_id=store_id)
+                product = Product(external_id=ext_id, store_id=store_id)
                 db.add(product)
                 
             product.title = title
@@ -342,7 +367,7 @@ def process_uploaded_file_task(store_id: str, file_key: str, file_type: str) -> 
         store.index_status = "ready"
         store.index_progress_percent = 100
         store.indexed_product_count = indexed_count
-        store.last_sync_at = datetime.utcnow()
+        store.last_sync_at = datetime.now(UTC)
         db.commit()
         logger.info(f"Successfully processed and indexed {indexed_count} products for store {store_id}")
         
@@ -355,4 +380,3 @@ def process_uploaded_file_task(store_id: str, file_key: str, file_type: str) -> 
             db.commit()
     finally:
         db.close()
-

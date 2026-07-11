@@ -3,6 +3,10 @@ Pytest configuration and fixtures for testing.
 """
 
 import bcrypt
+import os
+
+os.environ.setdefault("TESTING", "true")
+
 _orig_hashpw = bcrypt.hashpw
 _orig_checkpw = bcrypt.checkpw
 bcrypt.hashpw = lambda password, salt: _orig_hashpw(password[:72] if len(password) > 72 else password, salt)

@@ -179,6 +179,7 @@
     // Extract Store ID from URL parameter, fallback to a mock store ID
     const urlParams = new URLSearchParams(window.location.search);
     const storeId = urlParams.get('store_id') || 'mock_store_id';
+    const widgetToken = urlParams.get('widget_token') || 'mock_widget_token';
     
     // Configure script tags parameters
     const scriptTag = document.getElementById('ss-widget-script');
@@ -187,7 +188,7 @@
 
     // Manually instantiate the widget class exposed by widget.js
     window.addEventListener('load', () => {
-      window.ssWidgetInstance = new window.SmartSearchWidget(storeId, 'http://localhost:8000/api/v1');
+      window.ssWidgetInstance = new window.SmartSearchWidget(storeId, 'http://localhost:8000/api/v1', widgetToken);
     });
   </script>
 </body>

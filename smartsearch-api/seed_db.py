@@ -5,6 +5,7 @@ from app.core.database import SessionLocal, create_tables
 from app.models.database import User, Store, APIKey, Product
 from app.services.user_service import pwd_context
 from app.core.search_engine import SemanticSearchEngine
+from app.utils.security import api_key_prefix, hash_api_key
 
 def seed():
     # Make sure tables exist
@@ -39,6 +40,7 @@ def seed():
             print("Creating seed store Boutique Jewels...")
             store = Store(
                 id=store_id,
+                owner_user_id=user.id,
                 name="Boutique Jewels",
                 platform="custom",
                 platform_store_id="custom_store_1",
@@ -77,16 +79,18 @@ def seed():
         if not api_key:
             print("Creating seed API key...")
             api_key = APIKey(
-                key="ss_key_boutique_jewels_12345",
+                key_hash=hash_api_key("ss_key_boutique_jewels_12345"),
+                key_prefix=api_key_prefix("ss_key_boutique_jewels_12345"),
                 store_id=store_id,
                 name="Default Sandbox Key",
+                scopes="search,ingest",
                 is_active=True
             )
             db.add(api_key)
             db.commit()
             print("Created API key: ss_key_boutique_jewels_12345")
         else:
-            print(f"API key already exists: {api_key.key}")
+            print(f"API key already exists: {api_key.key_prefix}")
 
         # Load and ingest sample products
         csv_path = "data/sample_products.csv"
@@ -97,7 +101,10 @@ def seed():
             for idx, row in df.iterrows():
                 prod_id = str(row['id'])
                 # Check if product already exists in SQLite
-                db_prod = db.query(Product).filter(Product.id == prod_id, Product.store_id == store_id).first()
+                db_prod = db.query(Product).filter(
+                    Product.external_id == prod_id,
+                    Product.store_id == store_id,
+                ).first()
                 
                 # Setup product properties
                 product_data = {
@@ -111,6 +118,7 @@ def seed():
                 }
                 
                 if not db_prod:
+                    product_data["external_id"] = product_data.pop("id")
                     db_prod = Product(**product_data)
                     db.add(db_prod)
                 else:

@@ -3,15 +3,17 @@ Rate limiting middleware using Redis.
 """
 
 import time
+import hashlib
 from typing import Callable
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import redis
 import os
 
 # Import our database utilities
 from app.core.database import get_redis
+from app.core.config import settings
+from app.core.observability import RATE_LIMIT_COUNT
 
 # Rate limit configuration
 RATE_LIMIT_DEFAULT = int(os.getenv("RATE_LIMIT_DEFAULT", "100"))
@@ -44,6 +46,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Check if rate limited
         if self._is_rate_limited(client_id):
+            RATE_LIMIT_COUNT.inc()
             from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -71,7 +74,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Try to get API key from header
         api_key = request.headers.get("X-API-Key") or request.headers.get("api_key")
         if api_key:
-            return f"api_key:{api_key}"
+            return f"api_key:{hashlib.sha256(api_key.encode()).hexdigest()}"
+
+        widget_token = request.headers.get("X-Widget-Token")
+        if widget_token:
+            return f"widget:{hashlib.sha256(widget_token.encode()).hexdigest()}"
 
         # Fallback to IP address
         forwarded = request.headers.get("X-Forwarded-For")
@@ -90,11 +97,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check if client has exceeded rate limit."""
         redis_client = get_redis()
         if not redis_client:
-            # If Redis is not available, skip rate limiting
-            return False
+            return settings.is_production
 
         key = f"rate_limit:{client_id}"
-        current = redis_client.get(key)
+        try:
+            current = redis_client.get(key)
+        except Exception:
+            return settings.is_production
 
         if current is None:
             # First request, set counter = 1 with expiration
@@ -116,7 +125,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return self.rate_limit
 
         key = f"rate_limit:{client_id}"
-        current = redis_client.get(key)
+        try:
+            current = redis_client.get(key)
+        except Exception:
+            return 0 if settings.is_production else self.rate_limit
 
         if current is None:
             return self.rate_limit

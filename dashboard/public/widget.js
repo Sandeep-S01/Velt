@@ -1,8 +1,9 @@
 (function () {
   class SmartSearchWidget {
-    constructor(storeId, apiBase) {
+    constructor(storeId, apiBase, widgetToken) {
       this.storeId = storeId;
       this.apiBase = apiBase;
+      this.widgetToken = widgetToken;
       this.config = {
         theme: 'light',
         primary_color: '#4F46E5',
@@ -14,7 +15,7 @@
         enable_autocomplete: true
       };
       this.isOpen = false;
-      this.currentQueryLogId = null;
+      this.currentQueryEventToken = null;
       this.debounceTimeout = null;
 
       this.init();
@@ -32,10 +33,35 @@
     }
 
     async loadConfig() {
-      const resp = await fetch(`${this.apiBase}/widget/config/${this.storeId}`);
+      const resp = await fetch(`${this.apiBase}/widget/config/${this.storeId}`, {
+        headers: { 'X-Widget-Token': this.widgetToken }
+      });
       if (resp.ok) {
         const remoteConfig = await resp.json();
         this.config = { ...this.config, ...remoteConfig };
+        this.normalizeConfig();
+      }
+    }
+
+    normalizeConfig() {
+      if (!/^#[0-9a-f]{6}$/i.test(this.config.primary_color)) this.config.primary_color = '#4F46E5';
+      if (!['light', 'dark'].includes(this.config.theme)) this.config.theme = 'light';
+      if (!['bottom-left', 'bottom-right'].includes(this.config.position)) this.config.position = 'bottom-right';
+      this.config.placeholder_text = String(this.config.placeholder_text || 'Search for products...').slice(0, 100);
+    }
+
+    escapeHtml(value) {
+      const node = document.createElement('div');
+      node.textContent = String(value ?? '');
+      return node.innerHTML;
+    }
+
+    safeUrl(value) {
+      try {
+        const url = new URL(value, window.location.href);
+        return ['http:', 'https:'].includes(url.protocol) ? url.href : '#';
+      } catch {
+        return '#';
       }
     }
 
@@ -337,7 +363,7 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="search" class="ss-input" placeholder="${this.config.placeholder_text}" autocomplete="off" />
+            <input type="search" class="ss-input" autocomplete="off" />
             <button class="ss-close-btn">
               <svg viewBox="0 0 24 24">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -360,6 +386,7 @@
       this.fabEl = fab;
       this.overlayEl = overlay;
       this.inputEl = overlay.querySelector('.ss-input');
+      this.inputEl.placeholder = this.config.placeholder_text;
       this.closeBtnEl = overlay.querySelector('.ss-close-btn');
       this.autocompleteEl = overlay.querySelector('.ss-autocomplete-panel');
       this.loaderEl = overlay.querySelector('.ss-loader');
@@ -382,7 +409,8 @@
       window.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
           e.preventDefault();
-          this.isOpen ? this.closeSearch() : this.openSearch();
+          if (this.isOpen) this.closeSearch();
+          else this.openSearch();
         }
         if (e.key === 'Escape' && this.isOpen) {
           this.closeSearch();
@@ -416,7 +444,7 @@
       this.resultsEl.innerHTML = '<div class="ss-results-empty">Type something to search by meaning...</div>';
       this.autocompleteEl.classList.remove('ss-active');
       this.autocompleteEl.innerHTML = '';
-      this.currentQueryLogId = null;
+      this.currentQueryEventToken = null;
     }
 
     handleQueryChange(query) {
@@ -435,7 +463,8 @@
       this.debounceTimeout = setTimeout(async () => {
         try {
           const resp = await fetch(
-            `${this.apiBase}/widget/autocomplete?store_id=${this.storeId}&query=${encodeURIComponent(query)}`
+            `${this.apiBase}/widget/autocomplete?store_id=${this.storeId}&query=${encodeURIComponent(query)}`,
+            { headers: { 'X-Widget-Token': this.widgetToken } }
           );
           if (resp.ok) {
             const data = await resp.json();
@@ -447,7 +476,7 @@
       }, 150);
     }
 
-    renderSuggestions(suggestions, originalQuery) {
+    renderSuggestions(suggestions) {
       if (!suggestions || suggestions.length === 0) {
         this.autocompleteEl.classList.remove('ss-active');
         this.autocompleteEl.innerHTML = '';
@@ -457,9 +486,9 @@
       this.autocompleteEl.innerHTML = suggestions
         .map(
           (s) => `
-            <div class="ss-suggestion-item" data-value="${s}">
+            <div class="ss-suggestion-item" data-value="${this.escapeHtml(s)}">
               <span class="ss-bulb">💡</span>
-              <span>${s.replace(new RegExp(originalQuery, 'gi'), (m) => `<strong>${m}</strong>`)}</span>
+              <span>${this.escapeHtml(s)}</span>
             </div>
           `
         )
@@ -484,13 +513,14 @@
       this.autocompleteEl.classList.remove('ss-active');
       this.loaderEl.classList.add('ss-active');
       this.resultsEl.innerHTML = '';
-      this.currentQueryLogId = null;
+      this.currentQueryEventToken = null;
 
       try {
         const response = await fetch(`${this.apiBase}/widget/search`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Widget-Token': this.widgetToken
           },
           body: JSON.stringify({
             store_id: this.storeId,
@@ -502,11 +532,11 @@
         if (!response.ok) throw new Error('Search failed');
 
         // Extract query log ID from CORS response headers for click conversion attribution
-        this.currentQueryLogId = response.headers.get('X-Query-Log-ID');
+        this.currentQueryEventToken = response.headers.get('X-Query-Event-Token');
 
         const products = await response.json();
         this.renderResults(products);
-      } catch (err) {
+      } catch {
         this.resultsEl.innerHTML = `<div class="ss-results-empty" style="color: #EF4444">Error loading results. Please try again.</div>`;
       } finally {
         this.loaderEl.classList.remove('ss-active');
@@ -526,19 +556,24 @@
 
       this.resultsEl.innerHTML = products
         .map((p) => {
-          const scorePercent = Math.round((1 - p.score) * 100);
+          const scorePercent = Math.round(Math.max(0, Math.min(1, p.score)) * 100);
           const showPrice = this.config.show_price && p.price !== null;
+          const productUrl = this.safeUrl(p.product_url);
+          const imageUrl = this.safeUrl(p.image_url);
+          const productId = this.escapeHtml(p.id);
+          const title = this.escapeHtml(p.title);
+          const description = this.escapeHtml(p.description);
           
           return `
-            <a href="${p.product_url || '#'}" class="ss-card" data-product-id="${p.id}">
-              ${p.image_url 
-                ? `<img src="${p.image_url}" alt="${p.title}" class="ss-card-img" />`
+            <a href="${productUrl}" class="ss-card" data-product-id="${productId}">
+              ${imageUrl !== '#'
+                ? `<img src="${imageUrl}" alt="${title}" class="ss-card-img" />`
                 : `<div class="ss-card-fallback-img">📦</div>`
               }
               <div class="ss-card-details">
-                <h4 class="ss-card-title">${p.title}</h4>
+                <h4 class="ss-card-title">${title}</h4>
                 ${showPrice ? `<span class="ss-card-price">$${p.price.toFixed(2)}</span>` : ''}
-                ${p.description ? `<p class="ss-card-desc">${p.description}</p>` : ''}
+                ${p.description ? `<p class="ss-card-desc">${description}</p>` : ''}
                 <span class="ss-card-match">${scorePercent}% Match</span>
               </div>
             </a>
@@ -548,7 +583,7 @@
 
       // Add click tracking event listeners to search cards
       this.resultsEl.querySelectorAll('.ss-card').forEach((card) => {
-        card.addEventListener('click', (e) => {
+        card.addEventListener('click', () => {
           const productId = card.getAttribute('data-product-id');
           this.trackClick(productId);
         });
@@ -556,7 +591,7 @@
     }
 
     async trackClick(productId) {
-      if (!this.currentQueryLogId) return;
+      if (!this.currentQueryEventToken) return;
 
       try {
         await fetch(`${this.apiBase}/analytics/click`, {
@@ -565,7 +600,7 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            query_log_id: parseInt(this.currentQueryLogId, 10),
+            query_event_token: this.currentQueryEventToken,
             clicked_product_id: productId
           })
         });

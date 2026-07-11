@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, API_BASE_URL, getApiDocsUrl } from '../../lib/api';
 
@@ -23,7 +23,8 @@ interface ProductModel {
 
 interface APIKeyModel {
   id: number;
-  key: string;
+  key?: string;
+  key_prefix: string;
   name: string;
   is_active: boolean;
   created_at: string;
@@ -62,33 +63,28 @@ export const StoreDetail: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  const fetchStoreData = async () => {
+  const fetchStoreData = useCallback(async () => {
     if (!storeId) return;
     try {
       const data = await api.get<StoreModel>(`/stores/${storeId}`);
       setStore(data);
-      
-      // If indexing, poll for updates
-      if (data.index_status === 'indexing') {
-        setTimeout(fetchStoreData, 3000);
-      }
     } catch (err: any) {
       setError(err.message || 'Failed to load store data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
       const data = await api.get<StoreModel[]>('/stores/');
       setStores(data);
     } catch (err) {
       console.error('Failed to load stores list', err);
     }
-  };
+  }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     if (!storeId) return;
     try {
       setProductsLoading(true);
@@ -99,9 +95,9 @@ export const StoreDetail: React.FC = () => {
     } finally {
       setProductsLoading(false);
     }
-  };
+  }, [storeId]);
 
-  const fetchApiKeys = async () => {
+  const fetchApiKeys = useCallback(async () => {
     if (!storeId) return;
     try {
       setKeysLoading(true);
@@ -112,7 +108,7 @@ export const StoreDetail: React.FC = () => {
     } finally {
       setKeysLoading(false);
     }
-  };
+  }, [storeId]);
 
   useEffect(() => {
     if (storeId) {
@@ -121,7 +117,7 @@ export const StoreDetail: React.FC = () => {
       fetchApiKeys();
       fetchStores();
     }
-  }, [storeId]);
+  }, [fetchApiKeys, fetchProducts, fetchStoreData, fetchStores, storeId]);
 
   // Drag & Drop Handlers
   const handleDrag = (e: React.DragEvent) => {
@@ -178,22 +174,7 @@ export const StoreDetail: React.FC = () => {
     formData.append('store_id', storeId);
 
     try {
-      let api_key = apiKeys[0]?.key;
-      if (!api_key) {
-        // If no keys exist, auto-generate a default key
-        const generatedKey = await api.post<APIKeyModel>(`/stores/${storeId}/keys`, {
-          name: 'Default Ingestion Key',
-          is_active: true
-        });
-        setApiKeys((prev) => [generatedKey, ...prev]);
-        api_key = generatedKey.key;
-      }
-
-      await api.post('/upload', formData, {
-        headers: {
-          'X-API-Key': api_key
-        }
-      });
+      await api.post('/upload/dashboard', formData);
       setUploadSuccess(true);
       setUploadFile(null);
       
@@ -242,9 +223,10 @@ export const StoreDetail: React.FC = () => {
   }
 
   // Code Snippet generation templates
-  const primaryApiKey = apiKeys[0]?.key || 'vt_live_pk_********************';
+  const primaryApiKey = 'ss_live_REPLACE_WITH_NEW_KEY';
   const getEmbedCode = (tab: TabType) => {
     const cleanStoreId = store.id;
+    const widgetToken = store.widget_token;
     const currentOrigin = window.location.origin;
     const apiV1Base = API_BASE_URL;
     
@@ -259,7 +241,8 @@ export const StoreDetail: React.FC = () => {
   window.addEventListener('load', () => {
     window.ssWidgetInstance = new window.SmartSearchWidget(
       "${cleanStoreId}",
-      "${apiV1Base}"
+      "${apiV1Base}",
+      "${widgetToken}"
     );
   });
 </script>`;
@@ -273,7 +256,7 @@ export function VeltSearchWidget() {
     script.src = "${currentOrigin}/widget.js";
     script.async = true;
     script.onload = () => {
-      window.ssWidgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}');
+      window.ssWidgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}', '${widgetToken}');
     };
     document.body.appendChild(script);
     
@@ -300,7 +283,7 @@ onMounted(() => {
   script.src = "${currentOrigin}/widget.js";
   script.async = true;
   script.onload = () => {
-    widgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}');
+    widgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}', '${widgetToken}');
   };
   document.body.appendChild(script);
   
@@ -830,7 +813,7 @@ const searchCatalog = async (userQuery) => {
 
                       <div className="flex items-center gap-2">
                         <div className="font-mono text-[10px] bg-white border border-slate-150 px-2 py-1 rounded text-slate-700 select-all overflow-x-auto flex-1">
-                          {showApiKey ? keyObj.key : `vt_live_pk_${keyObj.key.slice(11, 15)}*******************`}
+                          {showApiKey && keyObj.key ? keyObj.key : `${keyObj.key_prefix}************************`}
                         </div>
                         <button
                           onClick={() => setShowApiKey(!showApiKey)}
@@ -840,7 +823,8 @@ const searchCatalog = async (userQuery) => {
                           {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                         <button
-                          onClick={() => triggerCopy(keyObj.key, `key-${keyObj.id}`)}
+                          onClick={() => keyObj.key && triggerCopy(keyObj.key, `key-${keyObj.id}`)}
+                          disabled={!keyObj.key}
                           className="p-1.5 hover:bg-slate-150 rounded-lg text-neutral-mediumgray hover:text-slate-800 border border-slate-200 bg-white transition-all cursor-pointer shrink-0"
                           title="Copy API key"
                         >

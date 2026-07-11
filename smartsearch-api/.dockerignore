@@ -1,0 +1,12 @@
+.env
+.git
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+chroma_db*
+data/uploads
+debug_*.py
+smartsearch.db
+test.db
+tests

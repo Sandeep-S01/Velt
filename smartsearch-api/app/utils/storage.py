@@ -5,6 +5,7 @@ Handles file uploads/downloads using MinIO/S3 with a local filesystem fallback f
 
 import os
 import logging
+from pathlib import Path
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
@@ -28,7 +29,7 @@ class StorageClient:
                 aws_access_key_id=settings.MINIO_ACCESS_KEY,
                 aws_secret_access_key=settings.MINIO_SECRET_KEY,
                 config=Config(signature_version="s3v4"),
-                verify=False
+                verify=True,
             )
             # Test connection by listing buckets or checking head
             self.s3.list_buckets()
@@ -43,6 +44,8 @@ class StorageClient:
                 if e.response['Error']['Code'] not in ('BucketAlreadyExists', 'BucketAlreadyOwnedByYou'):
                     raise e
         except Exception as e:
+            if not settings.ALLOW_LOCAL_STORAGE_FALLBACK:
+                raise RuntimeError("Object storage is required but unavailable") from e
             logger.warning(f"Could not connect to MinIO ({e}). Falling back to local filesystem storage.")
             self.use_fallback = True
             os.makedirs(self.local_dir, exist_ok=True)
@@ -52,10 +55,11 @@ class StorageClient:
         Upload file data and return the file_key/path.
         """
         # Generate a unique directory/prefix structure or use direct name
-        file_key = f"uploads/{file_name}"
+        normalized_name = file_name.replace("\\", "/").lstrip("/")
+        file_key = f"uploads/{normalized_name}"
         
         if self.use_fallback:
-            local_path = os.path.join(self.local_dir, file_name)
+            local_path = self._safe_local_path(file_name)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(file_data)
@@ -71,9 +75,11 @@ class StorageClient:
             logger.info(f"Uploaded file '{file_key}' to MinIO bucket '{self.bucket_name}'.")
             return file_key
         except Exception as e:
+            if not settings.ALLOW_LOCAL_STORAGE_FALLBACK:
+                raise
             logger.error(f"Error uploading file to MinIO: {e}. Attempting local write...")
             # Emergency fallback write
-            local_path = os.path.join(self.local_dir, file_name)
+            local_path = self._safe_local_path(file_name)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(file_data)
@@ -86,7 +92,7 @@ class StorageClient:
         # If it was saved via fallback or is a fallback URL
         if self.use_fallback or file_key.startswith("fallback://"):
             file_name = file_key.replace("fallback://", "").replace("uploads/", "")
-            local_path = os.path.join(self.local_dir, file_name)
+            local_path = self._safe_local_path(file_name)
             if not os.path.exists(local_path):
                 raise FileNotFoundError(f"File not found on local storage: {local_path}")
             with open(local_path, "rb") as f:
@@ -99,11 +105,18 @@ class StorageClient:
             logger.error(f"Error downloading file '{file_key}' from MinIO: {e}")
             # Try to read local fallback as emergency
             file_name = file_key.replace("uploads/", "")
-            local_path = os.path.join(self.local_dir, file_name)
+            local_path = self._safe_local_path(file_name)
             if os.path.exists(local_path):
                 with open(local_path, "rb") as f:
                     return f.read()
             raise e
+
+    def _safe_local_path(self, file_name: str) -> str:
+        root = Path(self.local_dir).resolve()
+        candidate = (root / file_name.replace("\\", "/")).resolve()
+        if root not in candidate.parents:
+            raise ValueError("Invalid storage path")
+        return str(candidate)
 
 # Global storage client singleton
 storage_client = StorageClient()
