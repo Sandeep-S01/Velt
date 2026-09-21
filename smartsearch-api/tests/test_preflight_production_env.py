@@ -8,6 +8,7 @@ def valid_production_values() -> dict[str, str]:
         "ENVIRONMENT": "production",
         "SECRET_KEY": "a-production-secret-with-at-least-32-characters",
         "BETA_INVITE_CODE": "a-private-beta-invite-code",
+        "METRICS_TOKEN": "a-private-metrics-token-with-32-bytes",
         "SHOPIFY_CLIENT_ID": "shopify-client-id",
         "SHOPIFY_CLIENT_SECRET": "shopify-client-secret",
         "SHOPIFY_ENCRYPTION_KEY": Fernet.generate_key().decode(),
@@ -39,3 +40,12 @@ def test_preflight_requires_invite_and_https_dashboard():
 
     assert "BETA_INVITE_CODE must be at least 16 characters" in errors
     assert "DASHBOARD_BASE_URL must use https://" in errors
+
+
+def test_preflight_requires_private_metrics_token():
+    values = valid_production_values()
+    values["METRICS_TOKEN"] = "short"
+
+    errors = validate_values(values)
+
+    assert "METRICS_TOKEN must be at least 32 characters" in errors

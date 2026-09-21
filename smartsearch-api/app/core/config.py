@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     JWT_ISSUER: str = "velt-api"
     JWT_AUDIENCE: str = "velt-dashboard"
     BETA_INVITE_CODE: str = os.getenv("BETA_INVITE_CODE", "")
+    METRICS_TOKEN: str = os.getenv("METRICS_TOKEN", "")
 
     # Rate limiting
     RATE_LIMIT_DEFAULT: int = int(os.getenv("RATE_LIMIT_DEFAULT", "100"))
@@ -109,6 +110,8 @@ class Settings(BaseSettings):
             invalid.append("ENABLE_DOCS")
         if len(self.BETA_INVITE_CODE) < 16 or "replace" in self.BETA_INVITE_CODE.lower():
             invalid.append("BETA_INVITE_CODE")
+        if len(self.METRICS_TOKEN) < 32 or "replace" in self.METRICS_TOKEN.lower():
+            invalid.append("METRICS_TOKEN")
         if not self.PUBLIC_API_BASE_URL.startswith("https://"):
             invalid.append("PUBLIC_API_BASE_URL")
         if not self.DASHBOARD_BASE_URL.startswith("https://"):

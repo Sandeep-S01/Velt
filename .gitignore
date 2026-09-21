@@ -76,6 +76,7 @@ sentence-transformers/
 
 # Runtime application data
 smartsearch-api/data/uploads/
+smartsearch-api/artifacts/
 
 # Keep empty runtime directories without tracking merchant data
 !smartsearch-api/data/uploads/.gitkeep

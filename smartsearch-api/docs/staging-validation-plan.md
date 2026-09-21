@@ -9,7 +9,7 @@ Run this plan before public launch and after every production-like infrastructur
 - Object storage with TLS enabled and local fallback disabled.
 - Persistent Chroma volume or private vector service.
 - Dashboard and API served over HTTPS on real staging domains.
-- Reverse proxy restricts `/metrics` to internal networks.
+- Reverse proxy restricts `/metrics` to internal networks, and monitoring authenticates with `METRICS_TOKEN`.
 - OpenAPI docs disabled unless protected by authentication.
 
 ## Required Checks

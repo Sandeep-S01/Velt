@@ -9,7 +9,7 @@ Use this checklist after merging production-readiness changes and before public 
 - S3-compatible object storage with TLS and a private uploads bucket.
 - Persistent Chroma volume mounted at `/data/chroma`.
 - HTTPS domains for API and dashboard.
-- Reverse proxy that blocks public access to `/metrics`.
+- Reverse proxy that blocks public access to `/metrics`; the API also requires `Authorization: Bearer <METRICS_TOKEN>`.
 
 ## 2. Prepare Secrets
 
@@ -17,6 +17,7 @@ Use this checklist after merging production-readiness changes and before public 
 - Replace every placeholder value.
 - Generate `SECRET_KEY` with at least 32 random characters.
 - Generate a random `BETA_INVITE_CODE` with at least 16 characters and share it only with approved merchants.
+- Generate a separate random `METRICS_TOKEN` with at least 32 characters and configure monitoring to send it as a bearer token.
 - Generate `SHOPIFY_ENCRYPTION_KEY` with:
 
 ```bash

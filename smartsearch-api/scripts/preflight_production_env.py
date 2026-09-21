@@ -29,6 +29,7 @@ REQUIRED_KEYS = {
     "PUBLIC_API_BASE_URL",
     "DASHBOARD_BASE_URL",
     "BETA_INVITE_CODE",
+    "METRICS_TOKEN",
     "DATABASE_URL",
     "REDIS_URL",
     "BACKEND_CORS_ORIGINS",
@@ -100,6 +101,9 @@ def validate_values(values: dict[str, str]) -> list[str]:
 
     if len(values.get("BETA_INVITE_CODE", "")) < 16:
         errors.append("BETA_INVITE_CODE must be at least 16 characters")
+
+    if len(values.get("METRICS_TOKEN", "")) < 32:
+        errors.append("METRICS_TOKEN must be at least 32 characters")
 
     if values.get("ENABLE_DOCS", "").lower() != "false":
         errors.append("ENABLE_DOCS must be false")

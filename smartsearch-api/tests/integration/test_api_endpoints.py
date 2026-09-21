@@ -98,6 +98,21 @@ def test_registration_requires_policy_acceptance_and_configured_invite(client):
     finally:
         settings.BETA_INVITE_CODE = previous_invite
 
+
+def test_metrics_require_configured_bearer_token(client):
+    previous_token = settings.METRICS_TOKEN
+    settings.METRICS_TOKEN = "test-metrics-token-with-at-least-32-bytes"
+    try:
+        assert client.get("/metrics").status_code == 404
+        authorized = client.get(
+            "/metrics",
+            headers={"Authorization": f"Bearer {settings.METRICS_TOKEN}"},
+        )
+        assert authorized.status_code == 200
+        assert authorized.headers["content-type"].startswith("text/plain")
+    finally:
+        settings.METRICS_TOKEN = previous_token
+
 def test_full_api_workflow(client):
     """Test user registration, login, store creation, api key auth, product ingest, and search."""
 

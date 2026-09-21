@@ -30,6 +30,7 @@ def test_production_accepts_explicit_secure_dependencies():
         PUBLIC_API_BASE_URL="https://api.example.com",
         DASHBOARD_BASE_URL="https://dashboard.example.com",
         BETA_INVITE_CODE="a-private-beta-invite-secret",
+        METRICS_TOKEN="a-private-metrics-token-with-32-bytes",
     )
 
     assert settings.is_production

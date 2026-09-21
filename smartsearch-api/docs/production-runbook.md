@@ -45,4 +45,4 @@
 
 - Page on readiness failure, PostgreSQL failure, sustained 5xx rate, backup failure, or webhook authentication failures.
 - Warn on p95 latency above 500 ms, queue backlog, elevated zero-result rate, rate-limit spikes, and failed syncs.
-- Protect `/metrics` at the internal network or reverse proxy; it is not intended as a public endpoint.
+- Protect `/metrics` at the internal network or reverse proxy and send `Authorization: Bearer <METRICS_TOKEN>` from monitoring.

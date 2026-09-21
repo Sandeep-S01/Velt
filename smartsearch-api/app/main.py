@@ -4,6 +4,7 @@ Main FastAPI application for SmartSearch API.
 
 import time
 import logging
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -184,7 +185,12 @@ async def health_check():
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics():
+async def metrics(request: Request):
+    if settings.METRICS_TOKEN:
+        supplied = request.headers.get("Authorization", "")
+        expected = f"Bearer {settings.METRICS_TOKEN}"
+        if not secrets.compare_digest(supplied, expected):
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # Redirects for standard documentation paths
