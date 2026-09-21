@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     API_V1_STR: str = "/api/v1"
+    RELEASE_SHA: str = (
+        os.getenv("RELEASE_SHA")
+        or os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("GITHUB_SHA")
+        or "development"
+    )
 
     # Server
     HOST: str = "0.0.0.0"

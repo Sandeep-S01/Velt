@@ -116,7 +116,12 @@ async def add_process_time_header(request: Request, call_next):
 
 @app.get("/health/live", tags=["health"])
 async def liveness_check():
-    return {"status": "healthy", "service": "smartsearch-api", "version": settings.VERSION}
+    return {
+        "status": "healthy",
+        "service": "smartsearch-api",
+        "version": settings.VERSION,
+        "release": settings.RELEASE_SHA,
+    }
 
 
 @app.get("/health/ready", tags=["health"])
@@ -164,6 +169,7 @@ async def readiness_check():
         "status": "healthy" if healthy else "unhealthy",
         "service": "smartsearch-api",
         "version": settings.VERSION,
+        "release": settings.RELEASE_SHA,
         "checks": {
             "database": db_status,
             "redis": redis_status,
@@ -201,5 +207,6 @@ async def root():
     return {
         "message": "Welcome to SmartSearch API",
         "version": settings.VERSION,
+        "release": settings.RELEASE_SHA,
         "docs": "/api/v1/docs"
     }

@@ -1,0 +1,76 @@
+name: Deploy Render API
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-production-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      API_ORIGIN: ${{ vars.RENDER_API_ORIGIN || 'https://velt.onrender.com' }}
+    steps:
+      - name: Check deployment configuration
+        id: config
+        shell: bash
+        run: |
+          if [[ -z "$RENDER_DEPLOY_HOOK_URL" ]]; then
+            echo "::notice::Render deployment skipped because RENDER_DEPLOY_HOOK_URL is not configured."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy tested commit
+        if: steps.config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --get \
+            --data-urlencode "ref=$DEPLOY_SHA" \
+            "$RENDER_DEPLOY_HOOK_URL" \
+            --output deploy-response.json
+
+      - name: Verify deployed release
+        if: steps.config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          expected = os.environ["DEPLOY_SHA"]
+          url = os.environ["API_ORIGIN"].rstrip("/") + "/health/live"
+
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen(url, timeout=20) as response:
+                      payload = json.load(response)
+                  release = payload.get("release", "missing")
+                  print(f"attempt={attempt + 1} status={payload.get('status')} release={release}")
+                  if payload.get("status") == "healthy" and release == expected:
+                      break
+              except (OSError, ValueError, urllib.error.HTTPError) as exc:
+                  print(f"attempt={attempt + 1} waiting={type(exc).__name__}")
+              time.sleep(15)
+          else:
+              raise SystemExit(f"Render did not expose tested release {expected} at {url}")
+          PY

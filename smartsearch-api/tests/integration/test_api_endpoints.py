@@ -101,6 +101,10 @@ def test_registration_requires_policy_acceptance_and_configured_invite(client):
 def test_full_api_workflow(client):
     """Test user registration, login, store creation, api key auth, product ingest, and search."""
 
+    live_response = client.get("/health/live")
+    assert live_response.status_code == 200
+    assert live_response.json()["release"] == settings.RELEASE_SHA
+
     demo_response = client.post(
         "/api/v1/demo/search",
         json={"query": "something to keep drinks cold under 40", "limit": 3},
