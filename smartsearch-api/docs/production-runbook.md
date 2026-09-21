@@ -5,8 +5,8 @@
 1. Build one immutable API image and scan it before deployment. Retain the CI `container-image-evidence-<commit>` artifact with the release record.
 2. Back up PostgreSQL and record the current Alembic revision.
 3. Run `alembic upgrade head` as a one-off job. Do not start the API if it fails.
-4. Start workers, then API instances, and require `/health/ready` to return 200.
-5. Verify `/metrics`, a widget search, authenticated dashboard access, and one ingestion job.
+4. Start workers, then API instances. The deployment workflow requires `/health/live` and `/health/ready` to report the exact tested commit, checks every dependency, and rejects publicly exposed metrics or API docs. Retain `deployment-verification-<commit>` with the release record.
+5. Run the destructive staging smoke gate to verify a widget search, authenticated dashboard access, ingestion, tenant isolation, analytics, and representative search load.
 6. Keep the embedded Chroma runtime to one API worker and one writer process per shared volume. Scale horizontally only after moving vector storage to a service that supports concurrent writers safely.
 
 ## Database Restore And Migration Rollback

@@ -39,7 +39,7 @@ Do not deploy until the preflight passes.
 ## 4. Deploy API And Worker
 
 - Build one immutable API image from `main`.
-- Configure the GitHub repository secret `RENDER_DEPLOY_HOOK_URL` from the API service's Render deploy-hook setting. The `Deploy Render API` workflow deploys the exact commit that passed CI and verifies that `/health/live` reports the same commit in its `release` field. Set the optional repository variable `RENDER_API_ORIGIN` if the API does not use `https://velt.onrender.com`.
+- Configure the GitHub repository secret `RENDER_DEPLOY_HOOK_URL` from the API service's Render deploy-hook setting. The `Deploy Render API` workflow fails closed when this secret is absent. It deploys the exact commit that passed CI, verifies both health endpoints and dependency status, confirms `/metrics` and API docs are private, and records `deployment-verification-<commit>`. Set the optional repository variable `RENDER_API_ORIGIN` if the API does not use `https://velt.onrender.com`.
 - Download the matching `container-image-evidence-<commit>`, `postgres-recovery-evidence-<commit>`, and `dashboard-browser-report-<commit>` CI artifacts and attach them to the release record.
 - Run `alembic upgrade head` as a one-off migration job.
 - Start one worker process.
