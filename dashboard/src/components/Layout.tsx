@@ -324,10 +324,15 @@ export const Layout: React.FC<LayoutProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Active
                 </span>
               </div>
-            ) : (
+            ) : activeStoreId ? (
               <div className="flex items-center gap-2 text-neutral-mediumgray font-semibold text-sm">
                 <Globe className="w-4 h-4 animate-spin text-brand" />
                 <span>Loading Console workspace...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-neutral-darkgray font-semibold text-sm">
+                <StoreIcon className="w-4.5 h-4.5 text-brand" />
+                <span>All stores</span>
               </div>
             )}
           </div>

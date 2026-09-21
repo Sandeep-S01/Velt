@@ -17,10 +17,10 @@ import {
 } from 'lucide-react';
 
 interface StoreAnalyticsSummary {
-  period_days: number;
-  total_searches: number;
-  average_latency_ms: number;
-  daily_searches: Array<{ date: string; searches: number }>;
+  period_days?: number;
+  total_searches?: number;
+  average_latency_ms?: number;
+  daily_searches?: Array<{ date: string; searches: number }>;
 }
 
 export interface StoreModel {
@@ -82,9 +82,15 @@ export const StoreList: React.FC = () => {
       analytics.forEach((result) => {
         if (result.status !== 'fulfilled') return;
         const summary = result.value;
-        searchesToday += summary.daily_searches.find((point) => point.date === today)?.searches || 0;
-        latencyTotal += summary.average_latency_ms * summary.total_searches;
-        measuredSearches += summary.total_searches;
+        const dailySearches = Array.isArray(summary?.daily_searches) ? summary.daily_searches : [];
+        const totalSearches = Number.isFinite(summary?.total_searches) ? summary.total_searches! : 0;
+        const averageLatencyMs = Number.isFinite(summary?.average_latency_ms)
+          ? summary.average_latency_ms!
+          : 0;
+
+        searchesToday += dailySearches.find((point) => point.date === today)?.searches || 0;
+        latencyTotal += averageLatencyMs * totalSearches;
+        measuredSearches += totalSearches;
       });
       setOverviewMetrics({
         searchesToday,
