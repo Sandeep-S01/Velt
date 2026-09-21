@@ -122,6 +122,7 @@ async def liveness_check():
         "service": "smartsearch-api",
         "version": settings.VERSION,
         "release": settings.RELEASE_SHA,
+        "environment": settings.ENVIRONMENT,
     }
 
 
@@ -171,6 +172,7 @@ async def readiness_check():
         "service": "smartsearch-api",
         "version": settings.VERSION,
         "release": settings.RELEASE_SHA,
+        "environment": settings.ENVIRONMENT,
         "checks": {
             "database": db_status,
             "redis": redis_status,

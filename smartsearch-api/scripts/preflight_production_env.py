@@ -12,6 +12,10 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.url_security import is_secure_redis_url
+
 PLACEHOLDER_MARKERS = (
     "change-me",
     "example.com",
@@ -123,8 +127,8 @@ def validate_values(values: dict[str, str]) -> list[str]:
         errors.append("DASHBOARD_BASE_URL must use https://")
 
     redis_url = values.get("REDIS_URL", "")
-    if not redis_url.startswith("rediss://"):
-        errors.append("REDIS_URL must use rediss://")
+    if not is_secure_redis_url(redis_url):
+        errors.append("REDIS_URL must use TLS or a Render private Key Value URL")
 
     database_url = values.get("DATABASE_URL", "")
     if not database_url.startswith(("postgresql://", "postgresql+psycopg2://")):

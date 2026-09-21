@@ -5,7 +5,7 @@ Use this checklist after merging production-readiness changes and before public 
 ## 1. Provision Staging Infrastructure
 
 - PostgreSQL with TLS, automated backups, and a non-shared staging database.
-- Redis with TLS, reachable only by API and worker services.
+- Render Key Value in the same region using its private `redis://red-...` URL, or another Redis provider using TLS (`rediss://`), reachable only by API and worker services.
 - S3-compatible object storage with TLS and a private uploads bucket.
 - Persistent Chroma volume mounted at `/data/chroma`.
 - HTTPS domains for API and dashboard.

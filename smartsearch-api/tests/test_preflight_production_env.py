@@ -15,7 +15,7 @@ def valid_production_values() -> dict[str, str]:
         "PUBLIC_API_BASE_URL": "https://api.staging.velt.test",
         "DASHBOARD_BASE_URL": "https://dashboard.staging.velt.test",
         "DATABASE_URL": "postgresql://velt:password@database.internal/velt",
-        "REDIS_URL": "rediss://:password@redis.internal/0",
+        "REDIS_URL": "rediss://:password@redis.example.net/0",
         "BACKEND_CORS_ORIGINS": '["https://dashboard.staging.velt.test"]',
         "ALLOWED_HOSTS": '["api.staging.velt.test"]',
         "ENABLE_DOCS": "false",

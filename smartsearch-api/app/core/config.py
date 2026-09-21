@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings
 from typing import List
 import os
 
+from app.core.url_security import is_secure_redis_url
+
 class Settings(BaseSettings):
     # Application
     PROJECT_NAME: str = "SmartSearch API"
@@ -96,8 +98,8 @@ class Settings(BaseSettings):
             invalid.append("SHOPIFY_ENCRYPTION_KEY")
         if not self.DATABASE_URL.startswith(("postgresql://", "postgresql+psycopg2://")):
             invalid.append("DATABASE_URL")
-        if not self.REDIS_URL.startswith("rediss://"):
-            invalid.append("REDIS_URL (rediss:// required)")
+        if not is_secure_redis_url(self.REDIS_URL):
+            invalid.append("REDIS_URL (TLS or Render private URL required)")
         if "*" in self.BACKEND_CORS_ORIGINS or not self.BACKEND_CORS_ORIGINS:
             invalid.append("BACKEND_CORS_ORIGINS")
         if "*" in self.ALLOWED_HOSTS or not self.ALLOWED_HOSTS:

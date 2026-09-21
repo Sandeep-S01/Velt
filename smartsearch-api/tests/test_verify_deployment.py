@@ -3,12 +3,16 @@ import scripts.verify_deployment as verifier
 
 def test_release_verification_requires_exact_healthy_private_deployment(monkeypatch):
     responses = {
-        "/health/live": (200, {"status": "healthy", "release": "a" * 40}),
+        "/health/live": (
+            200,
+            {"status": "healthy", "release": "a" * 40, "environment": "production"},
+        ),
         "/health/ready": (
             200,
             {
                 "status": "healthy",
                 "release": "a" * 40,
+                "environment": "production",
                 "checks": {"database": "healthy", "redis": "healthy", "chroma": "healthy"},
             },
         ),
@@ -29,12 +33,16 @@ def test_release_verification_requires_exact_healthy_private_deployment(monkeypa
 
 def test_release_verification_rejects_wrong_release_and_public_metrics(monkeypatch):
     responses = {
-        "/health/live": (200, {"status": "healthy", "release": "b" * 40}),
+        "/health/live": (
+            200,
+            {"status": "healthy", "release": "b" * 40, "environment": "development"},
+        ),
         "/health/ready": (
             200,
             {
                 "status": "healthy",
                 "release": "b" * 40,
+                "environment": "development",
                 "checks": {"database": "healthy", "redis": "healthy", "chroma": "healthy"},
             },
         ),
@@ -51,6 +59,7 @@ def test_release_verification_rejects_wrong_release_and_public_metrics(monkeypat
 
     assert result["passed"] is False
     assert result["checks"]["exact_release"] is False
+    assert result["checks"]["production_mode"] is False
     assert result["checks"]["public_metrics_blocked"] is False
 
 

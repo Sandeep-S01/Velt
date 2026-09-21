@@ -46,6 +46,10 @@ def verify_release_once(api_origin: str, expected_release: str, timeout: float) 
             live.get("release") == expected_release
             and ready.get("release") == expected_release
         ),
+        "production_mode": (
+            live.get("environment") == "production"
+            and ready.get("environment") == "production"
+        ),
         "dependencies": all(
             status == "healthy"
             for status in ready.get("checks", {}).values()
@@ -63,6 +67,8 @@ def verify_release_once(api_origin: str, expected_release: str, timeout: float) 
             "docs_status": docs_status,
             "live_release": live.get("release"),
             "ready_release": ready.get("release"),
+            "live_environment": live.get("environment"),
+            "ready_environment": ready.get("environment"),
             "dependencies": ready.get("checks", {}),
         },
     }
