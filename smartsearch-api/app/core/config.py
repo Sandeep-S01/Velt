@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_ISSUER: str = "velt-api"
     JWT_AUDIENCE: str = "velt-dashboard"
+    BETA_INVITE_CODE: str = os.getenv("BETA_INVITE_CODE", "")
 
     # Rate limiting
     RATE_LIMIT_DEFAULT: int = int(os.getenv("RATE_LIMIT_DEFAULT", "100"))
@@ -47,9 +48,10 @@ class Settings(BaseSettings):
     SHOPIFY_CLIENT_SECRET: str = os.getenv("SHOPIFY_CLIENT_SECRET", "mock_shopify_client_secret")
     SHOPIFY_ENCRYPTION_KEY: str = os.getenv("SHOPIFY_ENCRYPTION_KEY", "")
     PUBLIC_API_BASE_URL: str = os.getenv("PUBLIC_API_BASE_URL", "http://localhost:8000")
+    DASHBOARD_BASE_URL: str = os.getenv("DASHBOARD_BASE_URL", "http://localhost:5173")
     SHOPIFY_REDIRECT_URI: str = os.getenv("SHOPIFY_REDIRECT_URI", "")
     SHOPIFY_SCOPES: str = os.getenv("SHOPIFY_SCOPES", "read_products,read_inventory")
-    SHOPIFY_API_VERSION: str = os.getenv("SHOPIFY_API_VERSION", "2026-04")
+    SHOPIFY_API_VERSION: str = os.getenv("SHOPIFY_API_VERSION", "2026-07")
 
     @property
     def public_api_base_url(self) -> str:
@@ -99,8 +101,12 @@ class Settings(BaseSettings):
             invalid.append("MINIO_USE_SSL")
         if self.ENABLE_DOCS:
             invalid.append("ENABLE_DOCS")
+        if len(self.BETA_INVITE_CODE) < 16 or "replace" in self.BETA_INVITE_CODE.lower():
+            invalid.append("BETA_INVITE_CODE")
         if not self.PUBLIC_API_BASE_URL.startswith("https://"):
             invalid.append("PUBLIC_API_BASE_URL")
+        if not self.DASHBOARD_BASE_URL.startswith("https://"):
+            invalid.append("DASHBOARD_BASE_URL")
         if invalid:
             raise ValueError("Unsafe production settings: " + ", ".join(invalid))
         return self

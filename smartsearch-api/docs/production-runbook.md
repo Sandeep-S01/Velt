@@ -2,7 +2,7 @@
 
 ## Release
 
-1. Build one immutable API image and scan it before deployment.
+1. Build one immutable API image and scan it before deployment. Retain the CI `container-image-evidence-<commit>` artifact with the release record.
 2. Back up PostgreSQL and record the current Alembic revision.
 3. Run `alembic upgrade head` as a one-off job. Do not start the API if it fails.
 4. Start workers, then API instances, and require `/health/ready` to return 200.
@@ -14,11 +14,13 @@
 - Target beta RPO: 24 hours. Target RTO: 4 hours. Configure managed PostgreSQL daily backups and point-in-time recovery where available.
 - Restore into an isolated database, run validation queries, then update the application secret to the restored endpoint.
 - Prefer a forward-fix migration. Use `alembic downgrade <revision>` only when the migration includes a tested downgrade and no newer writes are incompatible.
+- CI verifies the latest downgrade/upgrade and a PostgreSQL logical backup/restore on every change. Retain `postgres-recovery-evidence-<commit>`; repeat the drill against managed staging backups before public launch.
 
 ## Vector Index Rebuild
 
-- Stop catalog mutation workers, retain PostgreSQL as source of truth, and move the affected Chroma collection aside.
-- Reindex active and searchable products store-by-store using the current index version.
+- Stop catalog mutation workers, retain PostgreSQL as source of truth, and snapshot the Chroma volume before replacing collections.
+- Reindex active products store-by-store using `python scripts/rebuild_chroma.py --store-id <id> --confirm-destructive-rebuild`. Use `--all-stores` only during a controlled maintenance window.
+- Retain the generated `artifacts/chroma-rebuild-*.json` report; the command fails when PostgreSQL and Chroma product counts do not match.
 - Run the merchant relevance benchmark and compare product counts before switching traffic.
 
 ## Credential Incident

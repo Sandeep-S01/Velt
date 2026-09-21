@@ -8,7 +8,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -28,6 +27,8 @@ REQUIRED_KEYS = {
     "SHOPIFY_CLIENT_SECRET",
     "SHOPIFY_ENCRYPTION_KEY",
     "PUBLIC_API_BASE_URL",
+    "DASHBOARD_BASE_URL",
+    "BETA_INVITE_CODE",
     "DATABASE_URL",
     "REDIS_URL",
     "BACKEND_CORS_ORIGINS",
@@ -97,6 +98,9 @@ def validate_values(values: dict[str, str]) -> list[str]:
     if len(values.get("SECRET_KEY", "")) < 32:
         errors.append("SECRET_KEY must be at least 32 characters")
 
+    if len(values.get("BETA_INVITE_CODE", "")) < 16:
+        errors.append("BETA_INVITE_CODE must be at least 16 characters")
+
     if values.get("ENABLE_DOCS", "").lower() != "false":
         errors.append("ENABLE_DOCS must be false")
 
@@ -110,6 +114,10 @@ def validate_values(values: dict[str, str]) -> list[str]:
     if not public_api_base_url.startswith("https://"):
         errors.append("PUBLIC_API_BASE_URL must use https://")
 
+    dashboard_base_url = values.get("DASHBOARD_BASE_URL", "")
+    if not dashboard_base_url.startswith("https://"):
+        errors.append("DASHBOARD_BASE_URL must use https://")
+
     redis_url = values.get("REDIS_URL", "")
     if not redis_url.startswith("rediss://"):
         errors.append("REDIS_URL must use rediss://")
@@ -118,7 +126,7 @@ def validate_values(values: dict[str, str]) -> list[str]:
     if not database_url.startswith(("postgresql://", "postgresql+psycopg2://")):
         errors.append("DATABASE_URL must use PostgreSQL")
 
-    for key in ("PUBLIC_API_BASE_URL", "DATABASE_URL", "REDIS_URL"):
+    for key in ("PUBLIC_API_BASE_URL", "DASHBOARD_BASE_URL", "DATABASE_URL", "REDIS_URL"):
         if values.get(key) and not urlparse(values[key]).scheme:
             errors.append(f"{key} is not a valid URL")
 
@@ -129,7 +137,6 @@ def validate_values(values: dict[str, str]) -> list[str]:
         if "localhost" in value or "127.0.0.1" in value:
             errors.append(f"{key} must not contain local development hosts")
 
-    os.environ.update(values)
     try:
         from cryptography.fernet import Fernet
 

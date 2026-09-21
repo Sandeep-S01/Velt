@@ -9,7 +9,11 @@ RUN groupadd --system velt && useradd --system --gid velt --home /app velt
 WORKDIR /app
 
 COPY requirements.txt requirements-base.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip pip install --requirement requirements.txt
+# Install the CPU-only PyTorch wheel before sentence-transformers. Installing
+# torch from the default Linux index also resolves multi-gigabyte CUDA runtimes.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0+cpu" && \
+    pip install --requirement requirements.txt
 
 COPY alembic.ini ./
 COPY alembic ./alembic

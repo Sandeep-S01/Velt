@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 interface AnalyticsData {
+  period_days: number;
   total_searches: number;
   no_results_count: number;
   click_through_rate: number;
@@ -36,7 +37,7 @@ export const Analytics: React.FC = () => {
       const storeData = await api.get<StoreModel>(`/stores/${storeId}`);
       setStore(storeData);
       
-      const analyticsData = await api.get<AnalyticsData>(`/analytics/${storeId}`);
+      const analyticsData = await api.get<AnalyticsData>(`/analytics/${storeId}?days=7`);
       setData(analyticsData);
     } catch (err: any) {
       setError(err.message || 'Failed to load analytics dashboard');
@@ -132,7 +133,7 @@ export const Analytics: React.FC = () => {
           
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-neutral-charcoal shadow-sm">
             <Calendar className="w-3.5 h-3.5 text-brand" />
-            <span>Last 7 Days</span>
+            <span>Last {data.period_days} Days</span>
           </div>
         </div>
 
@@ -359,7 +360,7 @@ export const Analytics: React.FC = () => {
             </div>
 
             <div className="text-[10px] text-neutral-mediumgray bg-slate-50 border border-slate-150 p-3 rounded-xl text-center font-bold">
-              Tip: Enable Synonyms in custom widget configuration to intercept zero-result searches.
+              Tip: Review the minimum relevance and stock rules in Widget Settings when valid products are being omitted.
             </div>
           </div>
 

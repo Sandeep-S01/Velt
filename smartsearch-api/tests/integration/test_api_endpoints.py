@@ -15,8 +15,9 @@ app.core.database.get_redis = lambda: None
 
 from app.main import app
 from app.core.database import get_db, Base
+from app.core.config import settings
 from app.core.search_engine import SemanticSearchEngine
-from app.models.database import Product
+from app.models.database import Product, SearchQueryLog
 from tests.conftest import engine, TestingSessionLocal
 
 # Create a temporary directory for test ChromaDB
@@ -56,8 +57,60 @@ def client():
     Base.metadata.drop_all(bind=engine)
     app.dependency_overrides.clear()
 
+
+def test_registration_requires_policy_acceptance_and_configured_invite(client):
+    missing_acceptance = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "no-terms@example.com",
+            "full_name": "No Terms",
+            "password": "securepassword123",
+        },
+    )
+    assert missing_acceptance.status_code == 422
+
+    previous_invite = settings.BETA_INVITE_CODE
+    settings.BETA_INVITE_CODE = "private-beta-code-123"
+    try:
+        rejected = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "wrong-invite@example.com",
+                "full_name": "Wrong Invite",
+                "password": "securepassword123",
+                "invite_code": "wrong-code",
+                "accept_terms": True,
+            },
+        )
+        assert rejected.status_code == 403
+
+        accepted = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "invited@example.com",
+                "full_name": "Invited Merchant",
+                "password": "securepassword123",
+                "invite_code": "private-beta-code-123",
+                "accept_terms": True,
+            },
+        )
+        assert accepted.status_code == 200
+    finally:
+        settings.BETA_INVITE_CODE = previous_invite
+
 def test_full_api_workflow(client):
     """Test user registration, login, store creation, api key auth, product ingest, and search."""
+
+    demo_response = client.post(
+        "/api/v1/demo/search",
+        json={"query": "something to keep drinks cold under 40", "limit": 3},
+    )
+    assert demo_response.status_code == 200
+    demo_data = demo_response.json()
+    assert demo_data["applied_filters"]["price_max"] == 40.0
+    assert demo_data["products"]
+    assert all(product["price"] <= 40 for product in demo_data["products"])
+    assert demo_data["products"][0]["id"] == "bottle-insulated"
     
     # 1. Register a new user
     register_response = client.post(
@@ -65,7 +118,8 @@ def test_full_api_workflow(client):
         json={
             "email": "merchant@example.com",
             "full_name": "Merchant Joe",
-            "password": "securepassword123"
+            "password": "securepassword123",
+            "accept_terms": True,
         }
     )
     assert register_response.status_code == 200
@@ -159,6 +213,20 @@ def test_full_api_workflow(client):
     # The ergonomic chair should rank first with a higher score than the water bottle
     assert results[0]["id"] == "p1"
     assert " lumbar " in results[0]["description"] or " chair " in results[0]["description"]
+
+    filtered_search_response = client.post(
+        "/api/v1/search",
+        headers=ingest_headers,
+        json={
+            "query": "insulated water bottle under 50",
+            "limit": 5,
+            "filters": {"price_max": 50},
+        },
+    )
+    assert filtered_search_response.status_code == 200
+    filtered_results = filtered_search_response.json()
+    assert filtered_results
+    assert all(result["metadata"]["price"] <= 50 for result in filtered_results)
     
     # 8. Test CSV Ingest via upload endpoint
     csv_content = (
@@ -195,6 +263,7 @@ def test_full_api_workflow(client):
             "email": "other@example.com",
             "full_name": "Other Merchant",
             "password": "securepassword456",
+            "accept_terms": True,
         },
     )
     assert other_register.status_code == 200
@@ -221,3 +290,64 @@ def test_full_api_workflow(client):
         store["id"] != store_id
         for store in client.get("/api/v1/stores/", headers=other_headers).json()
     )
+
+    delete_response = client.delete(f"/api/v1/stores/{store_id}", headers=headers)
+    assert delete_response.status_code == 200
+    assert app.state.search_engine._get_store_collection(store_id).count() == 0
+    db = TestingSessionLocal()
+    assert db.query(Product).filter(Product.store_id == store_id).count() == 0
+    assert db.query(SearchQueryLog).filter(SearchQueryLog.store_id == store_id).count() == 0
+    db.close()
+
+
+def test_account_deletion_requires_password_and_removes_owned_data(client):
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "delete-me@example.com",
+            "full_name": "Delete Me",
+            "password": "securepassword123",
+            "accept_terms": True,
+        },
+    )
+    assert registration.status_code == 200
+
+    login = client.post(
+        "/api/v1/auth/token",
+        data={"username": "delete-me@example.com", "password": "securepassword123"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    store = client.post(
+        "/api/v1/stores/",
+        headers=headers,
+        json={"name": "Disposable Store", "platform": "custom"},
+    )
+    assert store.status_code == 200
+    store_id = store.json()["id"]
+    app.state.search_engine._get_store_collection(store_id).add(
+        ids=["delete-vector"],
+        embeddings=[[0.0] * 384],
+        documents=["temporary product"],
+        metadatas=[{"store_id": store_id}],
+    )
+
+    rejected = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"password": "wrong-password"},
+    )
+    assert rejected.status_code == 403
+
+    deleted = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"password": "securepassword123"},
+    )
+    assert deleted.status_code == 200
+    assert client.post(
+        "/api/v1/auth/token",
+        data={"username": "delete-me@example.com", "password": "securepassword123"},
+    ).status_code == 401
+    assert app.state.search_engine._get_store_collection(store_id).count() == 0

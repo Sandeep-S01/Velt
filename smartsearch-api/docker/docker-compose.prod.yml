@@ -3,14 +3,17 @@ services:
     build:
       context: ..
     command: ["alembic", "upgrade", "head"]
-    env_file: ../.env.production
+    env_file: ${VELT_ENV_FILE:-../.env.production}
     restart: "no"
 
   api:
     build:
       context: ..
-    env_file: ../.env.production
+    env_file: ${VELT_ENV_FILE:-../.env.production}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -25,10 +28,23 @@ services:
   worker:
     build:
       context: ..
-    env_file: ../.env.production
-    command: ["celery", "-A", "app.tasks.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    env_file: ${VELT_ENV_FILE:-../.env.production}
+    command: ["celery", "-A", "app.tasks.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=1"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - chroma_data:/data/chroma
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: ..
+    env_file: ${VELT_ENV_FILE:-../.env.production}
+    command: ["celery", "-A", "app.tasks.celery_app:celery_app", "beat", "--loglevel=INFO"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

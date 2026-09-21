@@ -33,10 +33,10 @@ class Store(Base):
     is_active = Column(Boolean, default=True)
     sync_frequency_hours = Column(Integer, default=24)
     last_sync_at = Column(DateTime(timezone=True), nullable=True)
-    index_status = Column(String, default="pending")  # pending, indexing, ready, error
-    index_progress_percent = Column(Integer, default=0)
-    total_product_count = Column(Integer, default=0)
-    indexed_product_count = Column(Integer, default=0)
+    index_status = Column(String, nullable=False, default="pending", server_default="pending")  # pending, indexing, ready, error
+    index_progress_percent = Column(Integer, nullable=False, default=0, server_default="0")
+    total_product_count = Column(Integer, nullable=False, default=0, server_default="0")
+    indexed_product_count = Column(Integer, nullable=False, default=0, server_default="0")
     widget_config = Column(JSON, nullable=True)
     search_config = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

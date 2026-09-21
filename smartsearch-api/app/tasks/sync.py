@@ -4,7 +4,7 @@ Background Celery tasks for product synchronization and webhook processing.
 
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from app.tasks.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.database import Store, Product, WebhookEvent
@@ -14,6 +14,18 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _search_engine = None
+
+
+def _shopify_product_url(shop_domain: str, payload: dict) -> str:
+    online_store_url = str(payload.get("online_store_url") or "").strip()
+    if online_store_url:
+        return online_store_url
+    handle = str(payload.get("handle") or "").strip().strip("/")
+    return f"https://{shop_domain}/products/{handle}" if handle else ""
+
+
+def _shopify_product_is_active(payload: dict) -> bool:
+    return payload.get("status", "active") == "active"
 
 def get_search_engine():
     """Get or initialize the SemanticSearchEngine singleton for background task workers."""
@@ -90,6 +102,8 @@ def sync_shopify_products_task(store_id: str) -> None:
             
             brand = shopify_product.get("vendor")
             category = shopify_product.get("product_type")
+            product_url = _shopify_product_url(store.platform_domain, shopify_product)
+            is_active = _shopify_product_is_active(shopify_product)
 
             # Check if exists in db
             product = db.query(Product).filter(
@@ -105,9 +119,10 @@ def sync_shopify_products_task(store_id: str) -> None:
             product.price = price
             product.inventory_count = inventory
             product.image_url = image_url
+            product.product_url = product_url
             product.brand = brand
             product.category = category
-            product.is_active = True
+            product.is_active = is_active
             product.product_metadata = shopify_product
             
             # Format product dictionary for ChromaDB
@@ -119,7 +134,9 @@ def sync_shopify_products_task(store_id: str) -> None:
                 "category": category,
                 "brand": brand,
                 "image_url": image_url,
-                "is_active": True
+                "product_url": product_url,
+                "is_active": is_active,
+                "availability": "in_stock" if inventory > 0 else "out_of_stock",
             })
             
             indexed_count += 1
@@ -157,6 +174,35 @@ def sync_shopify_products_task(store_id: str) -> None:
         if store:
             store.index_status = "error"
             db.commit()
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.sync.sync_due_shopify_stores_task")
+def sync_due_shopify_stores_task() -> int:
+    """Queue reconciliation syncs for connected Shopify stores that are due."""
+    db = SessionLocal()
+    queued = 0
+    try:
+        now = datetime.now(UTC)
+        stores = db.query(Store).filter(
+            Store.platform == "shopify",
+            Store.is_active == True,
+            Store.api_key_encrypted.isnot(None),
+            Store.index_status.notin_(("pending", "indexing")),
+        ).all()
+        for store in stores:
+            frequency = max(1, int(store.sync_frequency_hours or 24))
+            last_sync = store.last_sync_at
+            if last_sync is not None and last_sync.tzinfo is None:
+                last_sync = last_sync.replace(tzinfo=UTC)
+            if last_sync is None or now - last_sync >= timedelta(hours=frequency):
+                store.index_status = "pending"
+                store.index_progress_percent = 0
+                db.commit()
+                sync_shopify_products_task.delay(store.id)
+                queued += 1
+        return queued
     finally:
         db.close()
 
@@ -201,6 +247,9 @@ def process_webhook_event_task(event_id: str) -> None:
             
             brand = payload.get("vendor")
             category = payload.get("product_type")
+            store = db.query(Store).filter(Store.id == store_id).first()
+            product_url = _shopify_product_url(store.platform_domain, payload) if store else ""
+            is_active = _shopify_product_is_active(payload)
 
             # Update PostgreSQL
             product = db.query(Product).filter(
@@ -216,9 +265,10 @@ def process_webhook_event_task(event_id: str) -> None:
             product.price = price
             product.inventory_count = inventory
             product.image_url = image_url
+            product.product_url = product_url
             product.brand = brand
             product.category = category
-            product.is_active = True
+            product.is_active = is_active
             product.product_metadata = payload
             db.commit()
 
@@ -231,7 +281,9 @@ def process_webhook_event_task(event_id: str) -> None:
                 "category": category,
                 "brand": brand,
                 "image_url": image_url,
-                "is_active": True
+                "product_url": product_url,
+                "is_active": is_active,
+                "availability": "in_stock" if inventory > 0 else "out_of_stock",
             }
             se.index_store_products(store_id=store_id, products=[product_dict])
             logger.info(f"Webhook indexed product {ext_id} for store {store_id}")
@@ -350,7 +402,9 @@ def process_uploaded_file_task(store_id: str, file_key: str, file_type: str) -> 
                 "category": category,
                 "brand": brand,
                 "image_url": image_url,
-                "is_active": is_active
+                "product_url": product_url,
+                "is_active": is_active,
+                "availability": "in_stock" if inventory > 0 else "out_of_stock",
             })
             
             indexed_count += 1

@@ -13,8 +13,15 @@ import {
   Clock,
   Trash2,
   Sliders,
-  TrendingUp
+  Activity
 } from 'lucide-react';
+
+interface StoreAnalyticsSummary {
+  period_days: number;
+  total_searches: number;
+  average_latency_ms: number;
+  daily_searches: Array<{ date: string; searches: number }>;
+}
 
 export interface StoreModel {
   id: string;
@@ -22,6 +29,7 @@ export interface StoreModel {
   name: string;
   platform: string;
   platform_store_id?: string;
+  platform_domain?: string;
   is_active: boolean;
   sync_frequency_hours: number;
   last_sync_at?: string;
@@ -29,6 +37,19 @@ export interface StoreModel {
   index_progress_percent?: number;
   total_product_count?: number;
   indexed_product_count?: number;
+  widget_config?: Partial<{
+    theme: string;
+    primary_color: string;
+    position: string;
+    border_radius: 'sm' | 'md' | 'lg';
+    placeholder_text: string;
+    show_price: boolean;
+    enable_autocomplete: boolean;
+  }>;
+  search_config?: Partial<{
+    min_score_threshold: number;
+    exclude_out_of_stock: boolean;
+  }>;
 }
 
 export const StoreList: React.FC = () => {
@@ -40,12 +61,35 @@ export const StoreList: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
   const [newStorePlatform, setNewStorePlatform] = useState('custom');
+  const [shopDomain, setShopDomain] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [overviewMetrics, setOverviewMetrics] = useState<{
+    searchesToday: number;
+    averageLatencyMs: number | null;
+  }>({ searchesToday: 0, averageLatencyMs: null });
 
   const fetchStores = async () => {
     try {
       const data = await api.get<StoreModel[]>('/stores/');
       setStores(data);
+      const analytics = await Promise.allSettled(
+        data.map((store) => api.get<StoreAnalyticsSummary>(`/analytics/${store.id}?days=7`))
+      );
+      const today = new Date().toISOString().slice(0, 10);
+      let searchesToday = 0;
+      let latencyTotal = 0;
+      let measuredSearches = 0;
+      analytics.forEach((result) => {
+        if (result.status !== 'fulfilled') return;
+        const summary = result.value;
+        searchesToday += summary.daily_searches.find((point) => point.date === today)?.searches || 0;
+        latencyTotal += summary.average_latency_ms * summary.total_searches;
+        measuredSearches += summary.total_searches;
+      });
+      setOverviewMetrics({
+        searchesToday,
+        averageLatencyMs: measuredSearches > 0 ? latencyTotal / measuredSearches : null,
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to load stores');
     } finally {
@@ -59,12 +103,21 @@ export const StoreList: React.FC = () => {
 
   const handleCreateStore = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStoreName.trim()) return;
+    if (newStorePlatform === 'shopify' && !shopDomain.trim()) return;
+    if (newStorePlatform !== 'shopify' && !newStoreName.trim()) return;
 
     setSubmitting(true);
     setError(null);
 
     try {
+      if (newStorePlatform === 'shopify') {
+        const result = await api.post<{ authorization_url: string }>('/shopify/authorize-url', {
+          shop: shopDomain.trim(),
+        });
+        window.location.assign(result.authorization_url);
+        return;
+      }
+
       const newStore = await api.post<StoreModel>('/stores/', {
         name: newStoreName,
         platform: newStorePlatform,
@@ -75,6 +128,7 @@ export const StoreList: React.FC = () => {
       setStores((prev) => [newStore, ...prev]);
       setIsModalOpen(false);
       setNewStoreName('');
+      setShopDomain('');
       setNewStorePlatform('custom');
     } catch (err: any) {
       setError(err.message || 'Failed to create store');
@@ -128,8 +182,6 @@ export const StoreList: React.FC = () => {
   // Aggregate Metrics Calculations
   const totalStores = stores.length;
   const totalProducts = stores.reduce((acc, s) => acc + (s.indexed_product_count || 0), 0);
-  const mockSearchesToday = totalStores > 0 ? totalStores * 4180 : 0;
-  const mockLatency = totalStores > 0 ? "42ms" : "--";
 
   return (
     <Layout stores={stores}>
@@ -165,14 +217,16 @@ export const StoreList: React.FC = () => {
             </div>
             <div className="bg-white rounded-2xl border border-neutral-lightgray/80 p-5 shadow-sm space-y-2">
               <div className="text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider">Searches Today</div>
-              <div className="text-2xl font-black text-neutral-charcoal">{mockSearchesToday.toLocaleString()}</div>
-              <span className="text-[10px] text-green-600 font-semibold flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5" /> +14.2% increase
+              <div className="text-2xl font-black text-neutral-charcoal">{overviewMetrics.searchesToday.toLocaleString()}</div>
+              <span className="text-[10px] text-neutral-mediumgray font-semibold flex items-center gap-1">
+                <Activity className="w-3.5 h-3.5" /> Measured widget traffic
               </span>
             </div>
             <div className="bg-white rounded-2xl border border-neutral-lightgray/80 p-5 shadow-sm space-y-2">
               <div className="text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider">Average response</div>
-              <div className="text-2xl font-black text-neutral-charcoal">{mockLatency}</div>
+              <div className="text-2xl font-black text-neutral-charcoal">
+                {overviewMetrics.averageLatencyMs === null ? '--' : `${Math.round(overviewMetrics.averageLatencyMs)}ms`}
+              </div>
               <span className="text-[10px] text-neutral-mediumgray font-semibold block">Vector search latency</span>
             </div>
           </div>
@@ -202,7 +256,7 @@ export const StoreList: React.FC = () => {
             <div>
               <h3 className="text-xl font-bold text-neutral-charcoal">Connect your first store</h3>
               <p className="text-sm text-neutral-mediumgray mt-2 max-w-sm mx-auto">
-                Integrate your Shopify store catalog, connect WooCommerce, or upload a custom CSV catalogue to start searching semantically.
+                Connect a Shopify store or upload a CSV or JSON catalog to start searching semantically.
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-3">
@@ -329,6 +383,7 @@ export const StoreList: React.FC = () => {
               </div>
 
               <form onSubmit={handleCreateStore} className="p-6 space-y-5">
+                {newStorePlatform !== 'shopify' && (
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider mb-2">
                     Store Name
@@ -342,6 +397,7 @@ export const StoreList: React.FC = () => {
                     placeholder="e.g. Gems and Ornaments"
                   />
                 </div>
+                )}
 
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider mb-2">
@@ -354,13 +410,29 @@ export const StoreList: React.FC = () => {
                   >
                     <option value="custom">Custom Ingestion (CSV / JSON API)</option>
                     <option value="shopify">Shopify Integration</option>
-                    <option value="woocommerce">WooCommerce (Coming soon)</option>
+                    <option value="woocommerce" disabled>WooCommerce (Coming soon)</option>
                   </select>
                 </div>
 
                 {newStorePlatform === 'shopify' && (
-                  <div className="p-3 bg-brand/5 border border-brand/15 text-[11px] font-semibold text-brand-dark rounded-xl leading-relaxed">
-                    Note: Shopify integration requires installing the Velt Connector application in your Shopify admin panel once registered.
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider mb-2">
+                        Shopify store domain
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={shopDomain}
+                        onChange={(e) => setShopDomain(e.target.value)}
+                        className="block w-full px-4 py-3 bg-white border border-neutral-lightgray rounded-xl text-neutral-charcoal text-sm font-semibold focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all"
+                        placeholder="your-store.myshopify.com"
+                        autoComplete="url"
+                      />
+                    </div>
+                    <div className="p-3 bg-brand/5 border border-brand/15 text-[11px] font-semibold text-brand-dark rounded-xl leading-relaxed">
+                      You will continue to Shopify to approve read-only product and inventory access. Catalog indexing starts automatically after approval.
+                    </div>
                   </div>
                 )}
 
@@ -377,7 +449,9 @@ export const StoreList: React.FC = () => {
                     disabled={submitting}
                     className="px-5 py-2.5 bg-brand text-white font-bold rounded-xl hover:bg-brand-dark transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 text-xs shadow-md shadow-brand/10"
                   >
-                    {submitting ? 'Registering...' : 'Register Store'}
+                    {submitting
+                      ? (newStorePlatform === 'shopify' ? 'Opening Shopify...' : 'Registering...')
+                      : (newStorePlatform === 'shopify' ? 'Continue to Shopify' : 'Register Store')}
                   </button>
                 </div>
               </form>

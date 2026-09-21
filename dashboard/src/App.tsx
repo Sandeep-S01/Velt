@@ -10,6 +10,7 @@ import { StoreDetail } from './pages/StoreDetail/StoreDetail';
 import { WidgetSettings } from './pages/Settings/WidgetSettings';
 import { Analytics } from './pages/Analytics/Analytics';
 import { ApiKeys } from './pages/Settings/ApiKeys';
+import { DataRetentionPolicy, PrivacyPolicy, SupportAndIncidents, TermsOfService } from './pages/Policies';
 
 // Route guards to protect console panel URL scopes
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,6 +51,10 @@ const AppRoutes: React.FC = () => {
     <Routes>
       {/* Public Pages */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/data-retention" element={<DataRetentionPolicy />} />
+      <Route path="/support" element={<SupportAndIncidents />} />
       <Route
         path="/login"
         element={

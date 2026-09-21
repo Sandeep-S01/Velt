@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
-import { getApiDocsUrl, WIDGET_SCRIPT_URL } from '../lib/api';
+import { api, getApiDocsUrl, WIDGET_SCRIPT_URL } from '../lib/api';
 import {
   ArrowRight,
   Check,
@@ -24,6 +24,23 @@ interface SearchDemoProduct {
   matchScore: string;
   category: string;
   tags: string[];
+}
+
+interface LiveDemoResponse {
+  query: string;
+  applied_filters: {
+    price_min?: number;
+    price_max?: number;
+    in_stock?: boolean;
+  };
+  products: Array<{
+    id: string;
+    title: string;
+    description: string;
+    price: number;
+    category: string;
+    score: number;
+  }>;
 }
 
 const PRESET_QUERIES = {
@@ -78,6 +95,9 @@ export const LandingPage: React.FC = () => {
 
   // Deeper Live Playground State
   const [playgroundQuery, setPlaygroundQuery] = useState(PRESET_QUERIES.shoes);
+  const [liveDemo, setLiveDemo] = useState<LiveDemoResponse | null>(null);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   // Copy State for script
   const [copied, setCopied] = useState(false);
@@ -94,6 +114,41 @@ export const LandingPage: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const query = playgroundQuery.trim();
+    if (query.length < 2) {
+      setLiveDemo(null);
+      setDemoError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setDemoLoading(true);
+      setDemoError(null);
+      try {
+        const result = await api.post<LiveDemoResponse>(
+          '/demo/search',
+          { query, limit: 3 },
+          { signal: controller.signal },
+        );
+        setLiveDemo(result);
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          setLiveDemo(null);
+          setDemoError(err?.message || 'The live demo is temporarily unavailable.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setDemoLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [playgroundQuery]);
 
   const handleLaunchApp = () => {
     if (isAuthenticated) {
@@ -142,11 +197,11 @@ export const LandingPage: React.FC = () => {
     },
     {
       q: "How does semantic search work?",
-      a: "Velt uses machine learning models to generate high-dimensional vector representations of your products (from titles, descriptions, and categories). When a query comes in, it generates a query vector and queries ChromaDB to find products with the highest cosine similarity, returning contextually accurate matches in under 30 milliseconds."
+      a: "Velt generates vector representations of product titles, descriptions, and categories. It compares each shopper query with those vectors, then combines semantic similarity with catalog filters and product data. Query latency is recorded for each search and varies with the catalog, model, and deployment."
     },
     {
       q: "Can I integrate with Shopify?",
-      a: "Yes! Velt features one-click catalog ingestion for Shopify storefronts. You can also ingest catalogs programmatically via our developer APIs or simply upload a CSV/JSON catalog file directly into the dashboard console."
+      a: "Yes. Connect a Shopify store through its authorization flow, then sync the catalog from the Velt dashboard. You can also ingest products through the API or upload a CSV or JSON catalog file."
     },
     {
       q: "Do I need machine learning knowledge?",
@@ -154,7 +209,7 @@ export const LandingPage: React.FC = () => {
     },
     {
       q: "How fast can I deploy Velt?",
-      a: "You can go live in under five minutes. Simply sync your store catalog, customize the visual search widget options in the dashboard, and copy-paste our single-line embedding script tag into your store HTML."
+      a: "After your catalog finishes syncing, you can configure the widget in the dashboard and add its script tag to your storefront. Setup time depends on your catalog size and commerce platform."
     }
   ];
 
@@ -309,7 +364,7 @@ export const LandingPage: React.FC = () => {
             <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#features">Features</a>
             <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#demo">Interactive Demo</a>
             <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#dashboard">Dashboard</a>
-            <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#pricing">Pricing</a>
+            <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#access">Beta Access</a>
             <a className="text-sm font-semibold text-neutral-darkgray hover:text-brand transition-colors" href="#faq">FAQ</a>
           </div>
 
@@ -348,7 +403,7 @@ export const LandingPage: React.FC = () => {
               <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#features">Features</a>
               <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#demo">Interactive Demo</a>
               <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#dashboard">Dashboard</a>
-              <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#pricing">Pricing</a>
+              <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#access">Beta Access</a>
               <a onClick={() => setMobileMenuOpen(false)} className="text-base font-semibold text-neutral-darkgray hover:text-brand" href="#faq">FAQ</a>
               <hr className="border-neutral-lightgray" />
               <div className="flex items-center gap-4 justify-between pt-2">
@@ -453,7 +508,7 @@ export const LandingPage: React.FC = () => {
                     <Sparkles className="w-4 h-4 text-brand animate-pulse" />
                     <span className="text-xs font-bold text-neutral-charcoal uppercase tracking-wider">Semantic Match Engine</span>
                   </div>
-                  <span className="text-[10px] font-bold text-brand uppercase tracking-wider bg-brand/10 px-2 py-0.5 rounded">Active</span>
+                  <span className="text-[10px] font-bold text-brand-dark uppercase tracking-wider bg-brand/10 px-2 py-0.5 rounded">Active</span>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -502,7 +557,7 @@ export const LandingPage: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-neutral-charcoal text-base">1. Select Source</h3>
                     <p className="text-xs text-neutral-mediumgray mt-1 leading-relaxed">
-                      Shopify, WooCommerce, CSV, or custom JSON API endpoints.
+                      Shopify, CSV, JSON, or custom API integrations.
                     </p>
                   </div>
                   <div className="flex flex-wrap justify-center lg:justify-start gap-1.5 pt-2">
@@ -530,7 +585,7 @@ export const LandingPage: React.FC = () => {
                   </div>
                   <div className="flex flex-wrap justify-center lg:justify-start gap-1.5 pt-2">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand/5 border border-brand/20 text-brand">Aura-Mini model</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand/5 border border-brand/20 text-brand">Synonyms Mapping</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand/5 border border-brand/20 text-brand">Semantic Similarity</span>
                   </div>
                 </div>
 
@@ -607,7 +662,7 @@ export const LandingPage: React.FC = () => {
                       <span className="w-3 h-3 rounded-full bg-red-400"></span>
                       <span className="text-xs font-bold text-neutral-charcoal uppercase tracking-wider">Keyword Matching</span>
                     </div>
-                    <span className="text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider bg-neutral-lightgray px-2 py-0.5 rounded">Legacy</span>
+                    <span className="text-[10px] font-bold text-neutral-darkgray uppercase tracking-wider bg-neutral-lightgray px-2 py-0.5 rounded">Legacy</span>
                   </div>
                   
                   <div className="mt-6 space-y-4">
@@ -766,7 +821,7 @@ export const LandingPage: React.FC = () => {
                 Try the live semantic parser
               </h2>
               <p className="text-base md:text-lg text-neutral-mediumgray font-medium leading-relaxed max-w-2xl mx-auto">
-                Click a customer query template to see how Velt's parser maps tokens to specific product filters and finds items immediately.
+                Enter any shopper request. This calls the same semantic engine used by storefront search and applies supported price and stock constraints.
               </p>
             </div>
 
@@ -815,35 +870,39 @@ export const LandingPage: React.FC = () => {
                 {/* Right Side: AI Ingestion Output (7 cols) */}
                 <div className="lg:col-span-7 bg-white rounded-2xl border border-neutral-lightgray/80 p-6 space-y-6">
                   
-                  {/* Parsing constraints block */}
+                  {/* Live query interpretation */}
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-neutral-charcoal uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-brand animate-pulse" /> AI Intent Classification
+                      <Sparkles className="w-4 h-4 text-brand animate-pulse" /> Live Query Execution
                     </h4>
                     
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-neutral-background border border-neutral-lightgray p-3 rounded-xl text-center">
-                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Category</div>
+                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Search mode</div>
                         <div className="text-xs font-black text-neutral-charcoal mt-1">
-                          {DEMO_PRODUCTS[playgroundQuery]?.detected.category || "General"}
+                          Semantic
                         </div>
                       </div>
                       <div className="bg-neutral-background border border-neutral-lightgray p-3 rounded-xl text-center">
-                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Color</div>
+                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Minimum price</div>
                         <div className="text-xs font-black text-neutral-charcoal mt-1">
-                          {DEMO_PRODUCTS[playgroundQuery]?.detected.color || "Any"}
+                          {liveDemo?.applied_filters.price_min !== undefined
+                            ? `$${liveDemo.applied_filters.price_min}`
+                            : 'Any'}
                         </div>
                       </div>
                       <div className="bg-neutral-background border border-neutral-lightgray p-3 rounded-xl text-center">
-                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Intent</div>
+                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Maximum price</div>
                         <div className="text-xs font-black text-neutral-charcoal mt-1">
-                          {DEMO_PRODUCTS[playgroundQuery]?.detected.intent || "General search"}
+                          {liveDemo?.applied_filters.price_max !== undefined
+                            ? `$${liveDemo.applied_filters.price_max}`
+                            : 'Any'}
                         </div>
                       </div>
                       <div className="bg-neutral-background border border-neutral-lightgray p-3 rounded-xl text-center">
-                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Budget Constraint</div>
+                        <div className="text-[10px] font-bold text-neutral-mediumgray uppercase">Results</div>
                         <div className="text-xs font-black text-neutral-charcoal mt-1">
-                          {DEMO_PRODUCTS[playgroundQuery]?.detected.budget || "None"}
+                          {demoLoading ? 'Searching…' : (liveDemo?.products.length ?? 0)}
                         </div>
                       </div>
                     </div>
@@ -855,31 +914,41 @@ export const LandingPage: React.FC = () => {
                       <Layers className="w-4 h-4 text-brand" /> Matching Catalog Products
                     </h4>
 
-                    {DEMO_PRODUCTS[playgroundQuery] ? (
+                    {demoLoading && !liveDemo ? (
+                      <div className="text-center py-10 bg-neutral-background border border-neutral-lightgray rounded-xl">
+                        <p className="text-xs text-neutral-mediumgray font-semibold">Running a live semantic search…</p>
+                      </div>
+                    ) : demoError ? (
+                      <div className="text-center py-10 bg-red-50 border border-red-100 rounded-xl">
+                        <p className="text-xs text-red-700 font-semibold">{demoError}</p>
+                      </div>
+                    ) : liveDemo && liveDemo.products.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {DEMO_PRODUCTS[playgroundQuery].products.map((prod, index) => (
-                          <div key={index} className="border border-neutral-lightgray/80 rounded-xl p-4 bg-neutral-background/30 flex flex-col justify-between">
+                        {liveDemo.products.map((prod) => (
+                          <div key={prod.id} className="border border-neutral-lightgray/80 rounded-xl p-4 bg-neutral-background/30 flex flex-col justify-between">
                             <div>
-                              <div className="text-2xl mb-2">{prod.image}</div>
+                              <div className="w-8 h-8 mb-2 rounded-lg bg-brand/10 text-brand flex items-center justify-center text-sm font-black">
+                                {prod.title.charAt(0)}
+                              </div>
                               <h5 className="font-bold text-xs text-neutral-charcoal line-clamp-1">{prod.title}</h5>
                               <div className="flex flex-wrap gap-1 mt-2">
-                                {prod.tags.map((tag) => (
-                                  <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-white border border-neutral-lightgray text-neutral-mediumgray font-semibold">
-                                    {tag}
-                                  </span>
-                                ))}
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white border border-neutral-lightgray text-neutral-mediumgray font-semibold">
+                                  {prod.category}
+                                </span>
                               </div>
                             </div>
                             <div className="mt-4 pt-3 border-t border-neutral-lightgray flex items-center justify-between">
-                              <span className="text-xs font-black text-neutral-charcoal">{prod.price}</span>
-                              <span className="text-[9px] font-bold text-brand uppercase tracking-wider">{prod.matchScore}</span>
+                              <span className="text-xs font-black text-neutral-charcoal">${prod.price.toFixed(2)}</span>
+                              <span className="text-[9px] font-bold text-brand uppercase tracking-wider">
+                                {Math.max(0, Math.min(100, Math.round(prod.score * 100)))}% match
+                              </span>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="text-center py-10 bg-neutral-background border border-dashed border-neutral-lightgray rounded-xl">
-                        <p className="text-xs text-neutral-mediumgray font-semibold">Type one of the preset search terms to see products</p>
+                        <p className="text-xs text-neutral-mediumgray font-semibold">No products matched this request and its constraints.</p>
                       </div>
                     )}
                   </div>
@@ -902,7 +971,7 @@ export const LandingPage: React.FC = () => {
                 Designed for absolute clarity
               </h2>
               <p className="text-base md:text-lg text-neutral-mediumgray font-medium leading-relaxed max-w-2xl mx-auto">
-                Manage catalogs, review queries, check widget performance settings, and watch your conversion metrics increase inside the Velt Console.
+                Manage catalogs, review queries, configure the widget, and measure search engagement inside the Velt Console.
               </p>
             </div>
 
@@ -912,8 +981,8 @@ export const LandingPage: React.FC = () => {
               {/* Header inside mockup */}
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-6 border-b border-neutral-lightgray">
                 <div>
-                  <h3 className="font-extrabold text-neutral-charcoal text-lg">Gems & Ornaments Dashboard</h3>
-                  <p className="text-xs text-neutral-mediumgray mt-0.5">Semantic Search Ingestion and Analytics Console</p>
+                  <h3 className="font-extrabold text-neutral-charcoal text-lg">Example merchant dashboard</h3>
+                  <p className="text-xs text-neutral-mediumgray mt-0.5">Illustrative catalog and analytics data</p>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg text-green-700 text-xs font-bold">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -962,14 +1031,14 @@ export const LandingPage: React.FC = () => {
                     <span className="font-semibold text-neutral-darkgray">"heavy metal gold ring size 7"</span>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-brand uppercase">Cosine Sim: 0.94</span>
-                      <span className="font-bold text-green-600">✓ Clicked</span>
+                      <span className="font-bold text-green-700">✓ Clicked</span>
                     </div>
                   </div>
                   <div className="flex justify-between items-center bg-white border border-neutral-lightgray/70 p-3 rounded-xl">
                     <span className="font-semibold text-neutral-darkgray">"waterproof boots for snow hiking"</span>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-brand uppercase">Cosine Sim: 0.89</span>
-                      <span className="font-bold text-green-600">✓ Clicked</span>
+                      <span className="font-bold text-green-700">✓ Clicked</span>
                     </div>
                   </div>
                 </div>
@@ -980,109 +1049,34 @@ export const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Section 7: Pricing Section */}
-        <section id="pricing" className="py-24 px-6 md:px-8 bg-white border-t border-neutral-lightgray">
-          <div className="max-w-6xl mx-auto space-y-16">
-            
-            <div className="text-center space-y-4 max-w-3xl mx-auto">
-              <span className="text-xs font-extrabold text-brand uppercase tracking-widest">Pricing Tiers</span>
-              <h2 className="text-4xl md:text-5xl font-black text-neutral-charcoal tracking-tight">
-                Simple, predictable pricing
-              </h2>
-              <p className="text-base md:text-lg text-neutral-mediumgray font-medium leading-relaxed max-w-2xl mx-auto">
-                Choose the pricing structure that fits your scale. Free to start, cancel at any time.
-              </p>
+        {/* Section 7: Private beta access */}
+        <section id="access" className="py-24 px-6 md:px-8 bg-white border-t border-neutral-lightgray">
+          <div className="max-w-4xl mx-auto">
+            <div className="border border-brand/20 rounded-3xl p-8 md:p-12 bg-brand/5 text-center space-y-8">
+              <div className="space-y-4">
+                <span className="text-xs font-extrabold text-brand uppercase tracking-widest">Private Beta</span>
+                <h2 className="text-4xl md:text-5xl font-black text-neutral-charcoal tracking-tight">
+                  Test Velt with your own catalog
+                </h2>
+                <p className="text-base md:text-lg text-neutral-darkgray font-medium leading-relaxed max-w-2xl mx-auto">
+                  Velt is currently offered as a private beta. Pricing, catalog limits, and service commitments will be published after production usage and reliability are measured.
+                </p>
+              </div>
+
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left text-sm font-semibold text-neutral-darkgray max-w-2xl mx-auto">
+                <li className="flex items-start gap-2"><Check className="w-4 h-4 text-brand mt-0.5 shrink-0" /> Shopify, CSV, and JSON catalog ingestion</li>
+                <li className="flex items-start gap-2"><Check className="w-4 h-4 text-brand mt-0.5 shrink-0" /> Semantic search with catalog constraints</li>
+                <li className="flex items-start gap-2"><Check className="w-4 h-4 text-brand mt-0.5 shrink-0" /> Configurable storefront search widget</li>
+                <li className="flex items-start gap-2"><Check className="w-4 h-4 text-brand mt-0.5 shrink-0" /> Query, click, and zero-result analytics</li>
+              </ul>
+
+              <button
+                onClick={handleLaunchApp}
+                className="inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark px-6 py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-95 shadow-md shadow-brand/10"
+              >
+                Redeem Beta Invite <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              
-              {/* Card 1: Starter */}
-              <div className="border border-neutral-lightgray/80 rounded-3xl p-8 bg-neutral-background/30 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-neutral-charcoal text-lg">Starter</h3>
-                  <p className="text-xs text-neutral-mediumgray mt-1 leading-relaxed">For testing and personal store projects.</p>
-                  
-                  <div className="my-8">
-                    <span className="text-4xl font-black text-neutral-charcoal">$0</span>
-                    <span className="text-xs text-neutral-mediumgray font-semibold"> / month</span>
-                  </div>
-
-                  <ul className="space-y-4 text-xs font-semibold text-neutral-darkgray">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> 1 Catalog Connection</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Up to 10,000 Products</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Standard search widget</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Basic analytics panel</li>
-                  </ul>
-                </div>
-
-                <button 
-                  onClick={handleLaunchApp}
-                  className="w-full bg-white hover:bg-neutral-lightgray/40 border border-neutral-lightgray/80 py-3 rounded-xl text-sm font-bold text-neutral-charcoal mt-10 transition-all active:scale-95"
-                >
-                  Start Building Free
-                </button>
-              </div>
-
-              {/* Card 2: Professional (Highlighted) */}
-              <div className="border-2 border-brand rounded-3xl p-8 bg-white flex flex-col justify-between shadow-xl shadow-brand/5 relative overflow-hidden">
-                <div className="absolute top-4 right-4 bg-brand text-white text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Recommended</div>
-                
-                <div>
-                  <h3 className="font-bold text-neutral-charcoal text-lg">Professional</h3>
-                  <p className="text-xs text-neutral-mediumgray mt-1 leading-relaxed">For growing brands and e-commerce stores.</p>
-                  
-                  <div className="my-8">
-                    <span className="text-4xl font-black text-neutral-charcoal">$29</span>
-                    <span className="text-xs text-neutral-mediumgray font-semibold"> / month</span>
-                  </div>
-
-                  <ul className="space-y-4 text-xs font-semibold text-neutral-darkgray">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Unlimited Store Catalogs</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Up to 100,000 Products</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Custom CSS widget settings</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Advanced search query analytics</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Priority indexing speeds</li>
-                  </ul>
-                </div>
-
-                <button 
-                  onClick={handleLaunchApp}
-                  className="w-full bg-brand hover:bg-brand-dark py-3 rounded-xl text-sm font-bold text-white mt-10 transition-all active:scale-95 shadow-md shadow-brand/10"
-                >
-                  Upgrade to Pro
-                </button>
-              </div>
-
-              {/* Card 3: Enterprise */}
-              <div className="border border-neutral-lightgray/80 rounded-3xl p-8 bg-neutral-background/30 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-neutral-charcoal text-lg">Enterprise</h3>
-                  <p className="text-xs text-neutral-mediumgray mt-1 leading-relaxed">For large merchants with high query loads.</p>
-                  
-                  <div className="my-8">
-                    <span className="text-4xl font-black text-neutral-charcoal">Custom</span>
-                    <span className="text-xs text-neutral-mediumgray font-semibold"> pricing</span>
-                  </div>
-
-                  <ul className="space-y-4 text-xs font-semibold text-neutral-darkgray">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Custom Product limits</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Dedicated vector DB cluster</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Custom ML synonym tuning</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Dedicated support manager</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-brand" /> Priority support and usage reporting</li>
-                  </ul>
-                </div>
-
-                <a 
-                  href="mailto:support@velt.ai"
-                  className="w-full bg-white hover:bg-neutral-lightgray/40 border border-neutral-lightgray/80 py-3 rounded-xl text-sm font-bold text-neutral-charcoal mt-10 transition-all active:scale-95 text-center"
-                >
-                  Contact Sales
-                </a>
-              </div>
-
-            </div>
-
           </div>
         </section>
 
@@ -1146,7 +1140,7 @@ export const LandingPage: React.FC = () => {
             Upgrade your store search relevance today
           </h2>
           <p className="text-base md:text-lg text-white/80 max-w-xl mb-10 font-medium">
-            Connect catalogs, generate high-accuracy vector mappings, and go live instantly.
+            Connect a catalog, let Velt index it, and add semantic product discovery to your storefront.
           </p>
 
           <button 
@@ -1235,18 +1229,18 @@ export const LandingPage: React.FC = () => {
                 <li><a className="hover:text-brand" href="#product">Relevance Engine</a></li>
                 <li><a className="hover:text-brand" href="#demo">Vector Database</a></li>
                 <li><a className="hover:text-brand" href="#dashboard">Client Overlay Widget</a></li>
-                <li><a className="hover:text-brand" href="#pricing">Pricing Plans</a></li>
+                <li><a className="hover:text-brand" href="#access">Beta Access</a></li>
               </ul>
             </div>
 
-            {/* Solutions links */}
+            {/* Supported catalog sources */}
             <div className="space-y-3.5">
-              <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Solutions</h4>
+              <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Catalog Sources</h4>
               <ul className="space-y-2 text-xs font-semibold">
-                <li><a className="hover:text-brand" href="#">Shopify Stores</a></li>
-                <li><a className="hover:text-brand" href="#">WooCommerce Integration</a></li>
-                <li><a className="hover:text-brand" href="#">Custom Commerce API</a></li>
-                <li><a className="hover:text-brand" href="#">B2B Catalog search</a></li>
+                <li>Shopify stores</li>
+                <li>CSV uploads</li>
+                <li>JSON uploads</li>
+                <li>Product API</li>
               </ul>
             </div>
 
@@ -1255,32 +1249,27 @@ export const LandingPage: React.FC = () => {
               <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Developers</h4>
               <ul className="space-y-2 text-xs font-semibold">
                 <li><a className="hover:text-brand flex items-center gap-1" href={getApiDocsUrl()} target="_blank" rel="noreferrer">API Documentation <ExternalLink className="w-3 h-3" /></a></li>
-                <li><a className="hover:text-brand" href="#">Embed Code Snippet</a></li>
-                <li><a className="hover:text-brand" href="#">Uptime Status</a></li>
-                <li><a className="hover:text-brand" href="#">GitHub Repository</a></li>
+                <li><Link className="hover:text-brand" to="/stores">Widget setup</Link></li>
+                <li><a className="hover:text-brand" href="#demo">Live API demo</a></li>
               </ul>
             </div>
 
-            {/* Resources links */}
+            {/* Policies and support */}
             <div className="space-y-3.5">
-              <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Resources</h4>
+              <h4 className="text-xs font-black text-neutral-charcoal uppercase tracking-wider">Policies</h4>
               <ul className="space-y-2 text-xs font-semibold">
-                <li><a className="hover:text-brand" href="#">E-Commerce Benchmarks</a></li>
-                <li><a className="hover:text-brand" href="#">Vector Embeddings 101</a></li>
-                <li><a className="hover:text-brand" href="#">Privacy Policy</a></li>
-                <li><a className="hover:text-brand" href="#">Terms of Service</a></li>
+                <li><Link className="hover:text-brand" to="/privacy">Privacy Policy</Link></li>
+                <li><Link className="hover:text-brand" to="/terms">Terms of Service</Link></li>
+                <li><Link className="hover:text-brand" to="/data-retention">Data Retention</Link></li>
+                <li><Link className="hover:text-brand" to="/support">Support & Incidents</Link></li>
               </ul>
             </div>
 
           </div>
 
           <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-semibold">
-            <span>&copy; {new Date().getFullYear()} Velt AI. Built for instant product discovery.</span>
-            <div className="flex gap-4">
-              <a className="hover:text-brand" href="#">Twitter</a>
-              <a className="hover:text-brand" href="#">GitHub</a>
-              <a className="hover:text-brand" href="#">Discord</a>
-            </div>
+            <span>&copy; {new Date().getFullYear()} Velt AI. Built for semantic product discovery.</span>
+            <a className="hover:text-brand" href="mailto:support@velt.ai">support@velt.ai</a>
           </div>
         </div>
       </footer>

@@ -14,3 +14,10 @@ def test_widget_builds_match_and_escape_untrusted_values():
     assert "this.safeUrl(p.product_url)" in source
     assert "X-Query-Event-Token" in source
     assert "query_log_id" not in source
+    assert "new AbortController()" in source
+    assert "aria-label=\"Close product search\"" in source
+    assert "aria-label=\"Search products\"" in source
+    assert "aria-hidden" in source
+    assert "aria-expanded" in source
+    assert "this.fabEl.focus()" in source
+    assert "keepalive: true" in source

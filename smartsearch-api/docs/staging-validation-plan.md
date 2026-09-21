@@ -14,6 +14,11 @@ Run this plan before public launch and after every production-like infrastructur
 
 ## Required Checks
 
+Automate the deployed application checks with `scripts/staging_smoke.py` or the manually triggered **Staging validation** GitHub workflow. The runner creates synthetic merchants and products, deletes them at the end, and writes a sanitized JSON evidence report.
+The runner also issues 50 widget searches at concurrency 5 and fails when p95 exceeds 500 ms or the error rate exceeds 1%. Adjust these values only when the recorded beta target changes.
+After the smoke gate passes, the workflow runs OWASP ZAP baseline scans against the dashboard and API. These scans spider the targets and perform passive analysis; retain both report artifacts with the release evidence.
+CI also checks every public dashboard route and the distributed widget in desktop and mobile Chromium for serious WCAG A/AA violations and horizontal overflow. Widget checks cover keyboard focus, hostile catalog rendering, token use, semantic-search results, and click attribution. Retain the `dashboard-browser-report-<commit>` artifact and manually exercise authenticated dashboard and a real storefront embed in staging.
+
 1. Run `alembic upgrade head` against an empty staging database.
 2. Restore a masked database backup into staging and run `alembic upgrade head`.
 3. Start API and worker from the same image artifact intended for production.
@@ -42,7 +47,7 @@ Run this plan before public launch and after every production-like infrastructur
 ## Recovery Drills
 
 1. Restore PostgreSQL from backup into isolated staging.
-2. Rebuild Chroma collections from PostgreSQL source-of-truth products.
+2. Rebuild Chroma collections from PostgreSQL source-of-truth products with `scripts/rebuild_chroma.py`, and retain its JSON evidence report.
 3. Roll forward a failed migration with a patch migration.
 4. Rotate JWT, private API key, public widget token, and Shopify credentials.
 5. Simulate failed ingestion and verify retry/dead-letter handling.

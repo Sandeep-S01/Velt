@@ -65,7 +65,8 @@ def test_upload_and_widget_flow(test_client):
         json={
             "email": "owner@store.com",
             "full_name": "Store Owner",
-            "password": "ownerpassword123"
+            "password": "ownerpassword123",
+            "accept_terms": True,
         }
     )
     assert register_response.status_code == 200
@@ -189,6 +190,18 @@ def test_upload_and_widget_flow(test_client):
     assert results[0]["id"] == "item_1"
     assert results[0]["title"] == "Wireless Bluetooth Headset"
     query_event_token = search_resp.headers["X-Query-Event-Token"]
+
+    preview_resp = test_client.post(
+        "/api/v1/widget/preview/search",
+        json={"store_id": store_id, "query": "wireless headphones", "limit": 1},
+        headers=user_headers,
+    )
+    assert preview_resp.status_code == 200
+    assert preview_resp.json()[0]["id"] == "item_1"
+    assert test_client.post(
+        "/api/v1/widget/preview/search",
+        json={"store_id": store_id, "query": "wireless headphones", "limit": 1},
+    ).status_code == 401
     oversized_search = test_client.post(
         "/api/v1/widget/search",
         json={"store_id": store_id, "query": "x" * 201, "limit": 2},
@@ -263,11 +276,15 @@ def test_upload_and_widget_flow(test_client):
     )
     assert analytics_resp.status_code == 200
     analytics_data = analytics_resp.json()
-    assert analytics_data["total_searches"] == 2
+    assert analytics_data["period_days"] == 7
+    assert analytics_data["total_searches"] == 3
     assert analytics_data["no_results_count"] == 1
-    assert analytics_data["click_through_rate"] == 0.5
-    assert analytics_data["top_queries"][0]["query"] == "listening to music without cables"
+    assert analytics_data["click_through_rate"] == pytest.approx(1 / 3, abs=0.0001)
+    assert any(
+        query["query"] == "listening to music without cables"
+        for query in analytics_data["top_queries"]
+    )
     assert analytics_data["top_clicked_products"][0]["title"] == "Wireless Bluetooth Headset"
     assert analytics_data["queries_without_results"][0]["query"] == "completely unrelated intent"
-    assert analytics_data["daily_searches"][0]["searches"] == 2
+    assert analytics_data["daily_searches"][0]["searches"] == 3
     assert analytics_data["average_latency_ms"] >= 0

@@ -28,6 +28,8 @@ def test_production_accepts_explicit_secure_dependencies():
         MINIO_USE_SSL=True,
         ENABLE_DOCS=False,
         PUBLIC_API_BASE_URL="https://api.example.com",
+        DASHBOARD_BASE_URL="https://dashboard.example.com",
+        BETA_INVITE_CODE="a-private-beta-invite-secret",
     )
 
     assert settings.is_production

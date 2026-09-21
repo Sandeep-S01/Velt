@@ -2,7 +2,7 @@
 
 Velt is an MVP AI SaaS product under production hardening that replaces traditional keyword-matching search bars in eCommerce storefronts with semantic, vector-based search.
 
-By mapping shopper search intents to catalog product descriptions rather than exact spelling tags, Velt helps merchants increase search conversions, understand user search traffic trends, and capture revenue from zero-result queries.
+By mapping shopper intent to catalog product descriptions rather than exact spelling tags, Velt helps merchants improve product discovery, understand search traffic, and identify zero-result queries.
 
 ---
 
@@ -31,7 +31,7 @@ graph TD
 - **Multi-Tenant Architecture**: Supports multiple store workspaces isolated into distinct ChromaDB collections and Neon DB relational profiles.
 - **Live Widget Studio**: Interactive double-pane preview customizer that allows merchants to brand primary accents, viewport scales (Desktop/Mobile), placeholder texts, and toggles (Price tags, Autocomplete, filters).
 - **Search Traffic Analytics**: Custom-rendered SVG line charts mapping query volume, click-through rates (CTR), top conversion rankings, and zero-result search insights.
-- **Low-Memory Runtime Optimization**: Features a dynamic switch (`USE_HF_INFERENCE=true`) to offload heavy neural network weights to the Hugging Face Serverless Inference API, keeping backend memory consumption well under 512MB for free cloud tiers (like Render).
+- **Remote Inference Option**: Set `USE_HF_INFERENCE=true` to use the Hugging Face Serverless Inference API instead of loading embedding model weights in the API process.
 - **SPA Routing Resilience**: Standardized client-side routing configs (`vercel.json`) to prevent 404 router errors on page refreshes.
 
 ---
@@ -81,6 +81,8 @@ DATABASE_URL=postgresql://neondb_owner:YOUR_NEON_PASSWORD@YOUR_NEON_HOST/neondb?
 SECRET_KEY=your_jwt_auth_encryption_secret_key
 USE_HF_INFERENCE=false
 HF_TOKEN=your_huggingface_access_token_if_needed
+DASHBOARD_BASE_URL=http://localhost:5173
+BETA_INVITE_CODE=
 ```
 
 Initialize your PostgreSQL tables and seed dummy data:
@@ -137,24 +139,17 @@ To run the storefront search widget demo locally:
 
 ---
 
-## ☁️ Production Deployment
+## Private Beta Deployment
 
-### Backend Deploy (Render Web Service)
-1. Link your GitHub repo to a new **Render Web Service** container.
-2. Select **Python 3** environment and use:
-   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-3. In **Environment Variables**, configure:
-   - `USE_HF_INFERENCE=true`
-   - `HF_TOKEN` = `your_free_huggingface_token`
-   - Add your Neon DB connection string under `DATABASE_URL`.
-   - Add your `SECRET_KEY`.
-   - Add `PUBLIC_API_BASE_URL` pointing to your deployed API root (e.g. `https://velt-api.onrender.com`).
+Velt is approved for controlled staging and invite-only private beta use. Follow [staging-deployment-next-steps.md](smartsearch-api/docs/staging-deployment-next-steps.md) and [staging-validation-plan.md](smartsearch-api/docs/staging-validation-plan.md) before onboarding merchant data.
 
-### Frontend Deploy (Vercel)
-1. Create a new project in **Vercel** pointing to your repository.
-2. Select `dashboard` as the **Root Directory**.
-3. Under **Environment Variables**, add `VITE_API_URL` pointing to your deployed Render API (e.g. `https://velt-api.onrender.com/api/v1`). If the widget is not served from the dashboard domain, also add `VITE_WIDGET_URL`.
-4. Click **Deploy**. Vercel will build the frontend assets and automatically apply the rewrite paths from `vercel.json` to handle client route redirects.
+Copy `smartsearch-api/.env.staging.example` to the deployment secret store and replace every placeholder. Production startup requires a random `BETA_INVITE_CODE` of at least 16 characters; distribute it only to approved beta merchants. Then run:
+
+```bash
+docker compose -f smartsearch-api/docker/docker-compose.prod.yml up -d
+```
+
+Set `VELT_ENV_FILE` to use a differently named environment file. The stack completes migrations before starting the API, worker, and scheduler. Deploy the dashboard with `VITE_API_URL` pointing to the HTTPS API `/api/v1` endpoint and set `VITE_WIDGET_URL` when the widget is hosted on a separate controlled domain.
 
 ---
 

@@ -34,7 +34,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.rate_limit = rate_limit
         self.window_seconds = window_seconds
-        self.exempt_paths = exempt_paths or ["/health", "/docs", "/redoc", "/openapi.json", "/api/v1/health"]
+        self.exempt_paths = exempt_paths or [
+            "/health",
+            "/health/live",
+            "/health/ready",
+            "/metrics",
+            "/docs",
+            "/redoc",
+            "/api/v1/health",
+        ]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip rate limiting for exempt paths
@@ -81,15 +89,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return f"widget:{hashlib.sha256(widget_token.encode()).hexdigest()}"
 
         # Fallback to IP address
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
+        # Uvicorn resolves trusted proxy headers before the request reaches the app.
+        # Reading X-Forwarded-For here would allow direct clients to spoof identities.
+        if request.client:
+            ip = request.client.host
         else:
-            # Handle TestClient and direct connections
-            if request.client:
-                ip = request.client.host
-            else:
-                ip = "unknown"
+            ip = "unknown"
 
         return f"ip:{ip}"
 
@@ -101,22 +106,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         key = f"rate_limit:{client_id}"
         try:
-            current = redis_client.get(key)
+            created = redis_client.set(
+                key,
+                1,
+                ex=self.window_seconds,
+                nx=True,
+            )
+            if created:
+                return False
+            current_count = int(redis_client.incr(key))
+            return current_count > self.rate_limit
         except Exception:
             return settings.is_production
-
-        if current is None:
-            # First request, set counter = 1 with expiration
-            redis_client.setex(key, self.window_seconds, 1)
-            return False
-
-        current_count = int(current)
-        if current_count >= self.rate_limit:
-            return True
-
-        # Increment counter
-        redis_client.incr(key)
-        return False
 
     def _get_remaining_requests(self, client_id: str) -> int:
         """Get remaining requests for client."""

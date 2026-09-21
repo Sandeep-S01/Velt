@@ -1,6 +1,6 @@
 # Beta Readiness Review
 
-Date: 2026-07-11
+Date: 2026-09-20
 Decision: Limited private beta only; no public self-serve launch yet.
 
 ## USP Validation
@@ -25,7 +25,7 @@ Not approved:
 
 ## Verified Locally
 
-- Backend lint: `ruff check app tests`
+- Backend lint: `ruff check app tests scripts seed_db.py`
 - Backend compile: `compileall`
 - Production config tests
 - Storage and widget source security tests
@@ -35,21 +35,28 @@ Not approved:
 - Widget/upload/analytics integration test
 - Relevance tests and evaluator smoke checks
 - Dashboard build: `npm run build`
-- Dashboard lint: `npm run lint` with existing warnings only
-- NPM production audit: zero high vulnerabilities
-- Alembic head check: single head `d9b5f2a7e160`
+- Backend test suite: 35 passing tests
+- Dashboard lint: `npm run lint`
+- Desktop/mobile Chromium checks: 18 passing public-route and widget accessibility, security, attribution, and viewport tests
+- NPM audit: zero known vulnerabilities
+- Alembic head check: single head `f0a2c4e6b810`
+- PostgreSQL 16 migration rollback/upgrade and logical `pg_dump`/`pg_restore` round trip
 - Docker Compose config validation
+- Staging workflow YAML validation, representative search-load gate, and passive OWASP ZAP jobs
+- Production release-candidate container build and runtime smoke check (`sha256:727c3a1d3e05`, 564,401,409 bytes)
+- Container runs as `velt` (UID/GID 999), imports the application, uses `torch 2.14.0+cpu` with no CUDA runtime packages, and includes fixed `cryptography 50.0.0`
+- CI retains commit-scoped container inspection and PostgreSQL recovery evidence artifacts
 - Secret pattern scan: no obvious cloud/private-key patterns found
 
 ## Known Blockers Before Public Beta
 
 1. Staging validation has not been executed against production-like PostgreSQL, Redis, object storage, Chroma persistence, dashboard hosting, and real HTTPS domains.
-2. `pip-audit` still reports `chromadb 1.5.9` as `PYSEC-2026-311`. There is no fixed Chroma release available at review time. Current mitigation is not exposing Chroma's HTTP server and using embedded `PersistentClient` only.
-3. Local Docker image build did not complete within 20 minutes because of the Python ML dependency chain. CI includes the Docker build gate, but the production image still needs a successful build in CI or staging.
-4. Backup restore, Chroma rebuild, and migration rollback have runbooks but have not been proven against staging data.
+2. `pip-audit` reports four explicitly registered Chroma server advisories with no fixed release. Current mitigation is using embedded `PersistentClient` only and prohibiting Chroma HTTP exposure; public launch still requires a fixed release, replacement, or formal topology-specific acceptance.
+3. The production container builds and runs locally with CPU-only PyTorch. CI or staging must still build and record the immutable image digest for each release.
+4. PostgreSQL migration rollback and logical restore are proven locally and enforced in CI. Managed backup restore and Chroma rebuild still need proof against staging infrastructure.
 5. External dynamic security scanning against staging has not been performed.
-6. Accessibility/mobile browser checks for the widget and dashboard need manual validation.
-7. Public legal/support assets are still required: privacy policy, terms, data-retention policy, support contact, and incident process.
+6. Public dashboard routes and the distributed widget now have automated desktop/mobile accessibility and overflow checks. Authenticated dashboard workflows and a real merchant storefront embed still need manual staging validation on representative browsers.
+7. Public privacy, terms, retention, and support/incident routes are implemented. They still require counsel review and deployment verification before public launch.
 
 ## Risk Acceptance For Private Beta
 
@@ -64,4 +71,4 @@ Private beta may proceed only if:
 
 ## Final Recommendation
 
-Use the current codebase for staging and a narrow private beta. Do not publish as a public SaaS until the staging gates, operational drills, Docker build, Chroma vulnerability decision, external scan, and legal/support assets are complete.
+Use the current codebase for staging and a narrow private beta. Do not publish as a public SaaS until the staging gates, operational drills, per-release image evidence, Chroma vulnerability decision, external scan, and legal/support assets are complete.

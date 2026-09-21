@@ -38,15 +38,36 @@ jobs:
           key: huggingface-${{ runner.os }}-all-MiniLM-L6-v2
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-ci.txt
-      - run: python -m ruff check app tests
-      - run: python -m compileall -q app
+      - run: python -m ruff check app tests scripts seed_db.py
+      - run: python -m compileall -q app tests scripts seed_db.py
       - run: python -m pytest -q
-      - run: docker build --tag velt-api:ci .
-      # Chroma PYSEC-2026-311 has no fixed release yet. Velt uses embedded
+      - run: python -m alembic heads
+      - name: Build production container
+        run: docker build --tag velt-api:ci .
+      - name: Verify production container runtime
+        run: |
+          docker run --rm --entrypoint sh velt-api:ci -c 'test "$(id -u)" -ne 0'
+          docker run --rm --entrypoint python velt-api:ci -c "import app.main, chromadb, sentence_transformers, torch; assert torch.version.cuda is None; print(torch.__version__)"
+          mkdir -p artifacts
+          docker image inspect velt-api:ci > artifacts/container-image-inspect.json
+          sha256sum artifacts/container-image-inspect.json > artifacts/container-image-inspect.sha256
+      - name: Upload container evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-image-evidence-${{ github.sha }}
+          path: smartsearch-api/artifacts/container-image-inspect.*
+          if-no-files-found: error
+          retention-days: 30
+      # These Chroma advisories have no fixed release. Velt uses embedded
       # PersistentClient only; see smartsearch-api/docs/security-risk-register.md.
-      - run: python -m pip_audit -r requirements.txt --ignore-vuln PYSEC-2026-311
+      - run: >-
+          python -m pip_audit -r requirements.txt
+          --ignore-vuln PYSEC-2026-311
+          --ignore-vuln PYSEC-2026-3813
+          --ignore-vuln PYSEC-2026-3814
+          --ignore-vuln PYSEC-2026-3815
 
-  dashboard:
+  dashboard-and-widget:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,4 +82,114 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - run: node --check public/widget.js
+      - name: Verify widget distributions match
+        run: cmp --silent public/widget.js ../widget/widget.js
       - run: npm audit --omit=dev --audit-level=high
+      - name: Install Chromium for browser checks
+        run: npx playwright install --with-deps chromium
+      - name: Run responsive accessibility checks
+        run: npm run test:e2e
+      - name: Upload browser-check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-browser-report-${{ github.sha }}
+          path: |
+            dashboard/playwright-report
+            dashboard/test-results
+          if-no-files-found: warn
+          retention-days: 30
+
+  production-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose manifest
+        working-directory: smartsearch-api
+        env:
+          VELT_ENV_FILE: ../.env.staging.example
+        run: docker compose -f docker/docker-compose.prod.yml config --quiet
+
+  postgres-recovery-drill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: velt
+          POSTGRES_PASSWORD: velt-ci-password
+          POSTGRES_DB: velt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U velt -d velt"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: smartsearch-api
+    env:
+      DATABASE_URL: postgresql://velt:velt-ci-password@127.0.0.1:5432/velt
+      RESTORE_DATABASE_URL: postgresql://velt:velt-ci-password@127.0.0.1:5432/velt_restore
+      SECRET_KEY: ci-only-secret-key-with-at-least-32-bytes
+      REDIS_URL: redis://localhost:6379/0
+      USE_HF_INFERENCE: "false"
+      TEST_EMBEDDINGS: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: smartsearch-api/requirements-ci.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-ci.txt
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Verify migration rollback and logical restore
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python -m alembic upgrade head
+          expected_head="$(python -m alembic heads | awk '{print $1}')"
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+          current_head="$(python -m alembic current | awk '{print $1}')"
+          test "$current_head" = "$expected_head"
+          psql "$DATABASE_URL" --set=ON_ERROR_STOP=1 --command "CREATE TABLE recovery_drill_marker (value text PRIMARY KEY); INSERT INTO recovery_drill_marker VALUES ('${GITHUB_SHA}');"
+          pg_dump "$DATABASE_URL" --format=custom --file=artifacts/postgres-recovery.dump
+          psql "postgresql://velt:velt-ci-password@127.0.0.1:5432/postgres" --set=ON_ERROR_STOP=1 --command "CREATE DATABASE velt_restore;"
+          pg_restore --dbname="$RESTORE_DATABASE_URL" --exit-on-error artifacts/postgres-recovery.dump
+          restored_marker="$(psql "$RESTORE_DATABASE_URL" --tuples-only --no-align --set=ON_ERROR_STOP=1 --command 'SELECT value FROM recovery_drill_marker;')"
+          test "$restored_marker" = "$GITHUB_SHA"
+          restored_head="$(DATABASE_URL="$RESTORE_DATABASE_URL" python -m alembic current | awk '{print $1}')"
+          test "$restored_head" = "$expected_head"
+          dump_sha256="$(sha256sum artifacts/postgres-recovery.dump | awk '{print $1}')"
+          python - <<PY
+          import json
+          from datetime import UTC, datetime
+          from pathlib import Path
+
+          evidence = {
+              "schema_version": 1,
+              "commit": "${GITHUB_SHA}",
+              "alembic_head": "${expected_head}",
+              "restored_alembic_head": "${restored_head}",
+              "marker_restored": True,
+              "dump_sha256": "${dump_sha256}",
+              "completed_at": datetime.now(UTC).isoformat(),
+          }
+          Path("artifacts/postgres-recovery.json").write_text(
+              json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-recovery-evidence-${{ github.sha }}
+          path: smartsearch-api/artifacts/postgres-recovery.json
+          if-no-files-found: error
+          retention-days: 30

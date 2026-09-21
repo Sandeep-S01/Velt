@@ -13,6 +13,9 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.models.database import Store, Product, SearchQueryLog
 from app.core.search_engine import SemanticSearchEngine
+from app.utils.security import get_current_active_user, get_owned_store
+from app.core.query_parser import derive_search_filters
+from app.models.schemas import SearchFilters
 
 router = APIRouter(prefix="/widget", tags=["widget"])
 
@@ -21,6 +24,7 @@ class WidgetSearchRequest(BaseModel):
     store_id: str = Field(..., min_length=1, max_length=100)
     query: str = Field(..., min_length=1, max_length=200)
     limit: int = Field(default=5, ge=1, le=20)
+    filters: Optional[SearchFilters] = None
 
 class WidgetSearchCard(BaseModel):
     id: str
@@ -71,10 +75,11 @@ def get_widget_config(
         "theme": "light",
         "primary_color": "#4F46E5",
         "position": "bottom-right",
+        "border_radius": "md",
         "placeholder_text": "Search for products...",
-        "show_filters": True,
+        "show_filters": False,
         "show_price": True,
-        "show_rating": True,
+        "show_rating": False,
         "enable_autocomplete": True
     }
     
@@ -95,10 +100,13 @@ def get_widget_config(
         "position": stored.get("position")
         if stored.get("position") in {"bottom-left", "bottom-right"}
         else "bottom-right",
+        "border_radius": stored.get("border_radius")
+        if stored.get("border_radius") in {"sm", "md", "lg"}
+        else "md",
         "placeholder_text": placeholder[:100],
-        "show_filters": bool(stored.get("show_filters", True)),
+        "show_filters": bool(stored.get("show_filters", False)),
         "show_price": bool(stored.get("show_price", True)),
-        "show_rating": bool(stored.get("show_rating", True)),
+        "show_rating": bool(stored.get("show_rating", False)),
         "enable_autocomplete": bool(stored.get("enable_autocomplete", True)),
     }
 
@@ -127,11 +135,18 @@ def widget_search(
     threshold = max(0.0, min(1.0, threshold))
     started_at = time.perf_counter()
     try:
+        filters = derive_search_filters(
+            query,
+            request_data.filters.model_dump(exclude_none=True) if request_data.filters else None,
+        )
+        if (store.search_config or {}).get("exclude_out_of_stock"):
+            filters.setdefault("in_stock", True)
         raw_results = se.search_store(
             store_id=store_id,
             query=query,
             n_results=limit,
             min_score=threshold,
+            filters=filters,
         )
     except Exception:
         raise HTTPException(
@@ -191,6 +206,28 @@ def widget_search(
     response.headers["Access-Control-Expose-Headers"] = "X-Query-Event-Token"
 
     return formatted_results
+
+
+@router.post("/preview/search", response_model=List[WidgetSearchCard])
+def preview_widget_search(
+    request_data: WidgetSearchRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+    se: SemanticSearchEngine = Depends(get_search_engine),
+):
+    """Run the widget search flow from the authenticated merchant dashboard."""
+    store = get_owned_store(db, request_data.store_id, current_user.id)
+    allowed_origins = store.widget_allowed_origins or []
+    preview_origin = allowed_origins[0] if allowed_origins else None
+    return widget_search(
+        request_data=request_data,
+        response=response,
+        x_widget_token=store.widget_token,
+        origin=preview_origin,
+        db=db,
+        se=se,
+    )
 
 @router.get("/autocomplete")
 def widget_autocomplete(

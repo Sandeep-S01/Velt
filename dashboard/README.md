@@ -1,32 +1,24 @@
-# React + TypeScript + Vite
+# Velt Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React and TypeScript dashboard for merchant onboarding, catalog management, widget configuration, analytics, and Velt's public beta pages.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Configure `VITE_API_URL` and `VITE_WIDGET_URL` from `.env.example` when the API and widget are not served from their production-relative paths.
+
+## Validation
+
+```bash
+npm run lint
+npm run build
+npm audit --audit-level=high
+npx playwright install chromium
+npm run test:e2e
+```
+
+The Playwright suite serves the production build and checks public routes and the distributed widget in desktop and mobile Chromium. It covers serious WCAG A/AA violations, horizontal overflow, widget keyboard focus, hostile catalog rendering, and click attribution.

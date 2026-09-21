@@ -3,7 +3,7 @@ Store service for handling store-related operations.
 """
 
 from sqlalchemy.orm import Session
-from app.models.database import Store
+from app.models.database import SearchClickEvent, SearchQueryLog, Store, WebhookEvent
 from app.models.schemas import StoreCreate, StoreUpdate
 
 def get_store(db: Session, store_id: str):
@@ -44,6 +44,15 @@ def delete_store(db: Session, store_id: str):
     """Delete a store."""
     db_store = db.query(Store).filter(Store.id == store_id).first()
     if db_store:
+        db.query(SearchClickEvent).filter(
+            SearchClickEvent.store_id == store_id
+        ).delete(synchronize_session=False)
+        db.query(SearchQueryLog).filter(
+            SearchQueryLog.store_id == store_id
+        ).delete(synchronize_session=False)
+        db.query(WebhookEvent).filter(
+            WebhookEvent.store_id == store_id
+        ).delete(synchronize_session=False)
         db.delete(db_store)
         db.commit()
     return db_store

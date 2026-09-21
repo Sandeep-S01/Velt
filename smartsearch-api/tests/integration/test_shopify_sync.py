@@ -69,6 +69,7 @@ def test_shopify_oauth_flow(test_client):
             "email": "shopify-owner@example.com",
             "full_name": "Shopify Owner",
             "password": "securepassword123",
+            "accept_terms": True,
         },
     )
     assert register.status_code == 200
@@ -78,6 +79,14 @@ def test_shopify_oauth_flow(test_client):
         data={"username": "shopify-owner@example.com", "password": "securepassword123"},
     )
     auth_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    dashboard_auth_resp = test_client.post(
+        "/api/v1/shopify/authorize-url",
+        headers=auth_headers,
+        json={"shop": "dashboard-test-store"},
+    )
+    assert dashboard_auth_resp.status_code == 200
+    assert "dashboard-test-store.myshopify.com" in dashboard_auth_resp.json()["authorization_url"]
 
     # 1. Authorize redirect
     auth_resp = test_client.get(
@@ -127,6 +136,7 @@ def test_shopify_oauth_flow(test_client):
     assert len(db_products) == 2
     assert any(p.title == "Mock Shopify Product A" for p in db_products)
     assert any(p.title == "Mock Shopify Product B" for p in db_products)
+    assert all(p.product_url and p.product_url.startswith("https://my-test-store.myshopify.com/products/") for p in db_products)
     
     # Verify that products are searchable in ChromaDB
     se = app.state.search_engine
@@ -134,6 +144,10 @@ def test_shopify_oauth_flow(test_client):
     assert len(results) >= 1
     assert results[0]["id"] == "789012"  # Mock product B ID
     db.close()
+
+    sync_resp = test_client.post(f"/api/v1/stores/{store_id}/sync", headers=auth_headers)
+    assert sync_resp.status_code == 202
+    assert sync_resp.json()["status"] == "queued"
 
 def test_shopify_webhooks(test_client):
     """Test webhook signature verification and async update/delete events."""

@@ -103,6 +103,7 @@ def test_user_crud_operations(db_session: Session):
         email="test@example.com",
         full_name="Test User",
         password="password123",  # Shorter password to avoid bcrypt issues
+        accept_terms=True,
         is_active=True,
         is_verified=False
     )

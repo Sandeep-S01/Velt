@@ -33,8 +33,7 @@ def create_user(db: Session, user: UserCreate):
     hashed_password = pwd_context.hash(user.password)
 
     # Create user dict without password field
-    user_data = user.model_dump()
-    del user_data['password']
+    user_data = user.model_dump(exclude={"password", "invite_code", "accept_terms"})
 
     # Create user instance
     db_user = User(**user_data, password_hash=hashed_password)

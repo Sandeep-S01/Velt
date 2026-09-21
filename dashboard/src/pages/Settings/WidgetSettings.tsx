@@ -12,11 +12,17 @@ interface WidgetConfig {
   theme: string;
   primary_color: string;
   position: string;
+  border_radius: 'sm' | 'md' | 'lg';
   placeholder_text: string;
   show_filters: boolean;
   show_price: boolean;
   show_rating: boolean;
   enable_autocomplete: boolean;
+}
+
+interface SearchConfig {
+  min_score_threshold: number;
+  exclude_out_of_stock: boolean;
 }
 
 export const WidgetSettings: React.FC = () => {
@@ -29,11 +35,16 @@ export const WidgetSettings: React.FC = () => {
     theme: 'light',
     primary_color: '#863bff',
     position: 'bottom-right',
+    border_radius: 'md',
     placeholder_text: 'Search for products...',
-    show_filters: true,
+    show_filters: false,
     show_price: true,
-    show_rating: true,
+    show_rating: false,
     enable_autocomplete: true,
+  });
+  const [searchConfig, setSearchConfig] = useState<SearchConfig>({
+    min_score_threshold: 0.25,
+    exclude_out_of_stock: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,7 +53,6 @@ export const WidgetSettings: React.FC = () => {
 
   // UX Extra States for Customizer Preview
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [borderRadius, setBorderRadius] = useState<'sm' | 'md' | 'lg'>('md');
   const [themePreset, setThemePreset] = useState<'minimal' | 'modern' | 'brand'>('modern');
 
   const fetchConfig = useCallback(async () => {
@@ -51,8 +61,30 @@ export const WidgetSettings: React.FC = () => {
       const storeData = await api.get<StoreModel>(`/stores/${storeId}`);
       setStore(storeData);
       
-      const configData = await api.get<WidgetConfig>(`/widget/config/${storeId}`);
+      const stored = storeData.widget_config || {};
+      const configData: WidgetConfig = {
+        theme: stored.theme === 'dark' ? 'dark' : 'light',
+        primary_color: /^#[0-9a-f]{6}$/i.test(stored.primary_color || '')
+          ? stored.primary_color!
+          : '#4F46E5',
+        position: stored.position === 'bottom-left' ? 'bottom-left' : 'bottom-right',
+        border_radius: ['sm', 'md', 'lg'].includes(stored.border_radius || '')
+          ? stored.border_radius!
+          : 'md',
+        placeholder_text: String(stored.placeholder_text || 'Search for products...').slice(0, 100),
+        show_filters: false,
+        show_price: stored.show_price !== false,
+        show_rating: false,
+        enable_autocomplete: stored.enable_autocomplete !== false,
+      };
       setConfig(configData);
+      setSearchConfig({
+        min_score_threshold: Math.max(
+          0,
+          Math.min(1, Number(storeData.search_config?.min_score_threshold ?? 0.25)),
+        ),
+        exclude_out_of_stock: storeData.search_config?.exclude_out_of_stock === true,
+      });
       
       // Attempt to auto-resolve border radius and theme presets based on fetched values
       if (configData.primary_color === '#863bff') {
@@ -92,7 +124,8 @@ export const WidgetSettings: React.FC = () => {
     try {
       // Save configuration by updating the Store model's widget_config JSON field
       await api.put(`/stores/${storeId}`, {
-        widget_config: config
+        widget_config: config,
+        search_config: searchConfig,
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -116,8 +149,8 @@ export const WidgetSettings: React.FC = () => {
 
   // Border Radius mapper
   const getRadiusClass = () => {
-    if (borderRadius === 'sm') return 'rounded-md';
-    if (borderRadius === 'lg') return 'rounded-2xl';
+    if (config.border_radius === 'sm') return 'rounded-md';
+    if (config.border_radius === 'lg') return 'rounded-2xl';
     return 'rounded-xl';
   };
 
@@ -251,9 +284,9 @@ export const WidgetSettings: React.FC = () => {
                     <button
                       key={r}
                       type="button"
-                      onClick={() => setBorderRadius(r)}
+                      onClick={() => setConfig({ ...config, border_radius: r })}
                       className={`px-2 py-2 rounded-lg border text-[11px] font-semibold text-center transition-all uppercase ${
-                        borderRadius === r
+                        config.border_radius === r
                           ? 'border-slate-800 bg-slate-50 text-slate-900 font-bold'
                           : 'border-slate-200 hover:border-slate-300 text-slate-500'
                       }`}
@@ -273,6 +306,7 @@ export const WidgetSettings: React.FC = () => {
                   type="text"
                   value={config.placeholder_text}
                   onChange={(e) => setConfig({ ...config, placeholder_text: e.target.value })}
+                  maxLength={100}
                   placeholder="Search store catalog..."
                   className="block w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-350 focus:border-brand rounded-xl text-xs text-neutral-charcoal focus:outline-none transition-all font-semibold"
                 />
@@ -320,16 +354,48 @@ export const WidgetSettings: React.FC = () => {
                     <span>Render Product Price Badges</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-darkgray select-none">
-                    <input
-                      type="checkbox"
-                      checked={config.show_filters}
-                      onChange={(e) => setConfig({ ...config, show_filters: e.target.checked })}
-                      className="w-4 h-4 rounded text-brand focus:ring-brand accent-brand border-slate-300"
-                    />
-                    <span>Render Semantic Match Filters</span>
-                  </label>
                 </div>
+              </div>
+
+              <div className="space-y-4 pt-5 border-t border-slate-100">
+                <div>
+                  <label htmlFor="relevance-threshold" className="block text-[10px] font-bold text-neutral-mediumgray uppercase tracking-wider">
+                    Minimum Relevance: {Math.round(searchConfig.min_score_threshold * 100)}%
+                  </label>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    Results below this semantic match score are omitted. Lower values return more products.
+                  </p>
+                </div>
+                <input
+                  id="relevance-threshold"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={searchConfig.min_score_threshold}
+                  onChange={(e) => setSearchConfig({
+                    ...searchConfig,
+                    min_score_threshold: Number(e.target.value),
+                  })}
+                  className="w-full accent-brand"
+                />
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-semibold text-neutral-darkgray select-none">
+                  <input
+                    type="checkbox"
+                    checked={searchConfig.exclude_out_of_stock}
+                    onChange={(e) => setSearchConfig({
+                      ...searchConfig,
+                      exclude_out_of_stock: e.target.checked,
+                    })}
+                    className="mt-0.5 w-4 h-4 rounded text-brand focus:ring-brand accent-brand border-slate-300"
+                  />
+                  <span>
+                    Exclude out-of-stock products
+                    <span className="block mt-0.5 text-[10px] font-medium text-slate-500">
+                      Applies to widget, API, preview, and natural-language searches.
+                    </span>
+                  </span>
+                </label>
               </div>
 
             </div>
@@ -504,14 +570,6 @@ export const WidgetSettings: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Display Filters overlay mock */}
-                  {config.show_filters && (
-                    <div className="flex gap-2 text-[10px] text-neutral-mediumgray font-extrabold items-center">
-                      <span>Refine search:</span>
-                      <span className="px-2 py-0.5 bg-slate-100 rounded-full border border-slate-200">Price <span className="text-[8px]">▼</span></span>
-                      <span className="px-2 py-0.5 bg-slate-100 rounded-full border border-slate-200">Stock <span className="text-[8px]">▼</span></span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Simulated Floating widget launcher button */}
@@ -536,7 +594,7 @@ export const WidgetSettings: React.FC = () => {
             <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-2.5">
               <Sparkles className="w-4 h-4 text-brand shrink-0 animate-pulse" />
               <p className="text-[10px] text-neutral-mediumgray leading-relaxed font-semibold">
-                This widget renders asynchronously as an overlay inside the merchant's storefront DOM client site scripts. Custom style updates take effect globally instantly.
+                The widget renders asynchronously as an overlay in the merchant storefront. Saved style changes appear when the widget reloads its configuration.
               </p>
             </div>
           </div>

@@ -4,6 +4,7 @@ import requests
 import time
 import hashlib
 import math
+import re
 
 
 class _InMemoryCollection:
@@ -27,6 +28,14 @@ class _InMemoryCollection:
 
     def count(self):
         return len(self.items)
+
+    def get(self, ids, include=None):
+        selected = [(str(item_id), self.items[str(item_id)]) for item_id in ids if str(item_id) in self.items]
+        return {
+            "ids": [item_id for item_id, _ in selected],
+            "documents": [item["document"] for _, item in selected],
+            "metadatas": [item["metadata"] for _, item in selected],
+        }
 
     def query(self, query_embeddings, n_results, where=None, include=None):
         query_embedding = query_embeddings[0]
@@ -69,6 +78,9 @@ class _InMemoryChromaClient:
         if name not in self.collections:
             self.collections[name] = _InMemoryCollection()
         return self.collections[name]
+
+    def delete_collection(self, name):
+        self.collections.pop(name, None)
 
     def heartbeat(self):
         return 1
@@ -331,20 +343,30 @@ class SemanticSearchEngine:
             doc_text = ". ".join(part for part in (title, brand, category, desc) if part)
             documents.append(doc_text)
 
+            inventory_count = prod.get("inventory_count")
+            availability = prod.get("availability")
+            if not availability:
+                availability = (
+                    "in_stock"
+                    if inventory_count is None or int(inventory_count) > 0
+                    else "out_of_stock"
+                )
+
             # Prepare metadata according to 05_Backend_Schema.md
+            price_value = prod.get("price")
             metadata = {
                 "product_id": prod_id,
                 "external_id": str(prod.get("external_id", "")) or prod_id,
                 "store_id": store_id,
                 "title": title,
-                "price": float(prod.get("price")) if prod.get("price") is not None else 0.0,
+                "price": float(price_value) if price_value is not None else 0.0,
                 "category": category,
                 "brand": brand,
                 "image_url": prod.get("image_url", "") or "",
                 "product_url": prod.get("product_url", "") or "",
                 "is_active": bool(prod.get("is_active", True)),
                 "is_searchable": bool(prod.get("is_searchable", True)),
-                "availability": prod.get("availability", "in_stock") or "in_stock"
+                "availability": availability,
             }
             metadatas.append(metadata)
 
@@ -366,12 +388,22 @@ class SemanticSearchEngine:
         collection = self._get_store_collection(store_id)
         collection.delete(ids=ids)
 
+    def delete_store_index(self, store_id: str) -> None:
+        """Remove every vector and document associated with a deleted store."""
+        collection_name = f"products_store_{store_id}"
+        try:
+            self.client.delete_collection(name=collection_name)
+        except Exception as exc:
+            if "does not exist" not in str(exc).casefold() and "not found" not in str(exc).casefold():
+                raise
+
     def search_store(
         self,
         store_id: str,
         query: str,
         n_results: int = 5,
         min_score: float = 0.0,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Search for products in a store-specific collection."""
         collection = self._get_store_collection(store_id)
@@ -385,7 +417,7 @@ class SemanticSearchEngine:
         query_embedding = self.get_embeddings([query])
 
         # Ensure n_results does not exceed total items in collection
-        actual_n = min(n_results, total_count)
+        actual_n = min(max(n_results * 10, 50), total_count)
         if actual_n <= 0:
             return []
 
@@ -399,21 +431,93 @@ class SemanticSearchEngine:
 
         # Format results
         formatted_results = []
+        seen_ids = set()
+
+        exact_id = query.strip()
+        if exact_id:
+            exact = collection.get(ids=[exact_id], include=['documents', 'metadatas'])
+            if exact.get('ids'):
+                metadata = exact['metadatas'][0]
+                if (
+                    metadata.get('is_active') is True
+                    and metadata.get('is_searchable') is True
+                    and self._matches_search_filters(metadata, filters)
+                ):
+                    formatted_results.append({
+                        'id': exact['ids'][0],
+                        'description': exact['documents'][0],
+                        'metadata': metadata,
+                        'distance': 0.0,
+                        'score': 1.0,
+                    })
+                    seen_ids.add(exact['ids'][0])
+
         if results['ids'] and len(results['ids'][0]) > 0:
             for i in range(len(results['ids'][0])):
+                result_id = results['ids'][0][i]
+                if result_id in seen_ids:
+                    continue
                 distance = results['distances'][0][i]
-                score = float(1 - distance)
+                semantic_score = float(1 - distance)
+                metadata = results['metadatas'][0][i]
+                if not self._matches_search_filters(metadata, filters):
+                    continue
+                lexical_score = self._lexical_score(
+                    query,
+                    results['documents'][0][i],
+                    metadata,
+                )
+                score = max(semantic_score, (semantic_score * 0.75) + (lexical_score * 0.25))
                 if score < min_score:
                     continue
                 formatted_results.append({
-                    'id': results['ids'][0][i],
+                    'id': result_id,
                     'description': results['documents'][0][i],
-                    'metadata': results['metadatas'][0][i],
+                    'metadata': metadata,
                     'distance': distance,
                     'score': score
                 })
 
-        return sorted(formatted_results, key=lambda item: (-item["score"], item["id"]))
+        return sorted(formatted_results, key=lambda item: (-item["score"], item["id"]))[:n_results]
+
+    def _matches_search_filters(
+        self,
+        metadata: Dict[str, Any],
+        filters: Optional[Dict[str, Any]],
+    ) -> bool:
+        if not filters:
+            return True
+        price = float(metadata.get("price") or 0.0)
+        if filters.get("price_min") is not None and price < float(filters["price_min"]):
+            return False
+        if filters.get("price_max") is not None and price > float(filters["price_max"]):
+            return False
+        category = filters.get("category")
+        if category and str(metadata.get("category") or "").casefold() != str(category).casefold():
+            return False
+        if filters.get("in_stock") is True and metadata.get("availability") != "in_stock":
+            return False
+        return True
+
+    def _lexical_score(self, query: str, document: str, metadata: Dict[str, Any]) -> float:
+        query_terms = set(re.findall(r"[a-z0-9]+", query.casefold()))
+        if not query_terms:
+            return 0.0
+        searchable = " ".join(
+            str(value or "")
+            for value in (
+                metadata.get("title"),
+                metadata.get("brand"),
+                metadata.get("category"),
+                document,
+            )
+        ).casefold()
+        searchable_terms = set(re.findall(r"[a-z0-9]+", searchable))
+        overlap = len(query_terms & searchable_terms) / len(query_terms)
+        title = str(metadata.get("title") or "").casefold()
+        if query.casefold().strip() == title:
+            return 1.0
+        return overlap
 
 # Example usage (for testing)
 if __name__ == "__main__":

@@ -2,7 +2,9 @@
 API routes for store search analytics and click tracking.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, Field
@@ -37,6 +39,7 @@ class ClickedProductStat(BaseModel):
     click_count: int
 
 class AnalyticsDashboardResponse(BaseModel):
+    period_days: int
     total_searches: int
     no_results_count: int
     click_through_rate: float
@@ -96,6 +99,7 @@ def track_search_click(
 @router.get("/{store_id}", response_model=AnalyticsDashboardResponse)
 def get_store_analytics(
     store_id: str,
+    days: int = Query(default=7, ge=1, le=365),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -104,19 +108,25 @@ def get_store_analytics(
     Requires dashboard user authentication.
     """
     get_owned_store(db, store_id, current_user.id)
+    period_start = datetime.now(UTC) - timedelta(days=days)
 
     # 1. Total searches
-    total_searches = db.query(SearchQueryLog).filter(SearchQueryLog.store_id == store_id).count()
+    total_searches = db.query(SearchQueryLog).filter(
+        SearchQueryLog.store_id == store_id,
+        SearchQueryLog.created_at >= period_start,
+    ).count()
 
     # 2. No results count
     no_results_count = db.query(SearchQueryLog).filter(
         SearchQueryLog.store_id == store_id,
-        SearchQueryLog.results_count == 0
+        SearchQueryLog.results_count == 0,
+        SearchQueryLog.created_at >= period_start,
     ).count()
 
     # 3. Click-through rate (CTR) calculation
     clicked_searches = db.query(SearchClickEvent).filter(
-        SearchClickEvent.store_id == store_id
+        SearchClickEvent.store_id == store_id,
+        SearchClickEvent.created_at >= period_start,
     ).count()
     
     ctr = 0.0
@@ -128,7 +138,8 @@ def get_store_analytics(
         SearchQueryLog.query,
         func.count(SearchQueryLog.id).label("count")
     ).filter(
-        SearchQueryLog.store_id == store_id
+        SearchQueryLog.store_id == store_id,
+        SearchQueryLog.created_at >= period_start,
     ).group_by(
         SearchQueryLog.query
     ).order_by(
@@ -142,7 +153,8 @@ def get_store_analytics(
         SearchClickEvent,
         SearchClickEvent.query_log_id == SearchQueryLog.id,
     ).filter(
-        SearchQueryLog.store_id == store_id
+        SearchQueryLog.store_id == store_id,
+        SearchQueryLog.created_at >= period_start,
     ).group_by(SearchQueryLog.query).all()
     clicks_by_query = dict(clicks_by_query_raw)
     top_queries = [
@@ -156,6 +168,7 @@ def get_store_analytics(
         func.count(SearchClickEvent.id).label("count")
     ).filter(
         SearchClickEvent.store_id == store_id,
+        SearchClickEvent.created_at >= period_start,
     ).group_by(
         SearchClickEvent.product_external_id
     ).order_by(
@@ -182,21 +195,27 @@ def get_store_analytics(
     ).filter(
         SearchQueryLog.store_id == store_id,
         SearchQueryLog.results_count == 0,
+        SearchQueryLog.created_at >= period_start,
     ).group_by(SearchQueryLog.query).order_by(func.count(SearchQueryLog.id).desc()).limit(10).all()
 
     daily_raw = db.query(
         func.date(SearchQueryLog.created_at),
         func.count(SearchQueryLog.id),
-    ).filter(SearchQueryLog.store_id == store_id).group_by(
+    ).filter(
+        SearchQueryLog.store_id == store_id,
+        SearchQueryLog.created_at >= period_start,
+    ).group_by(
         func.date(SearchQueryLog.created_at)
     ).order_by(func.date(SearchQueryLog.created_at)).all()
 
     average_latency = db.query(func.avg(SearchQueryLog.duration_ms)).filter(
         SearchQueryLog.store_id == store_id,
         SearchQueryLog.duration_ms.isnot(None),
+        SearchQueryLog.created_at >= period_start,
     ).scalar() or 0.0
 
     return AnalyticsDashboardResponse(
+        period_days=days,
         total_searches=total_searches,
         no_results_count=no_results_count,
         click_through_rate=ctr,

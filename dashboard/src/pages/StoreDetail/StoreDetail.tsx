@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, API_BASE_URL, getApiDocsUrl } from '../../lib/api';
+import { api, API_BASE_URL, getApiDocsUrl, WIDGET_SCRIPT_URL } from '../../lib/api';
 
 import { Layout } from '../../components/Layout';
 import type { StoreModel } from '../Stores/StoreList';
@@ -29,6 +29,13 @@ interface APIKeyModel {
   is_active: boolean;
   created_at: string;
   last_used_at?: string;
+}
+
+interface WidgetSearchResult {
+  id: string;
+  title: string;
+  score: number;
+  product_url?: string;
 }
 
 type TabType = 'html' | 'react' | 'vue' | 'api';
@@ -62,12 +69,18 @@ export const StoreDetail: React.FC = () => {
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [syncing, setSyncing] = useState(false);
+  const [testQuery, setTestQuery] = useState('');
+  const [testResults, setTestResults] = useState<WidgetSearchResult[]>([]);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
   const fetchStoreData = useCallback(async () => {
     if (!storeId) return;
     try {
       const data = await api.get<StoreModel>(`/stores/${storeId}`);
       setStore(data);
+      return data;
     } catch (err: any) {
       setError(err.message || 'Failed to load store data');
     } finally {
@@ -118,6 +131,65 @@ export const StoreDetail: React.FC = () => {
       fetchStores();
     }
   }, [fetchApiKeys, fetchProducts, fetchStoreData, fetchStores, storeId]);
+
+  useEffect(() => {
+    if (
+      !storeId ||
+      store?.platform !== 'shopify' ||
+      !store.platform_domain ||
+      !['pending', 'indexing'].includes(store.index_status || '')
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      const updatedStore = await fetchStoreData();
+      if (updatedStore?.index_status === 'ready') {
+        await fetchProducts();
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchProducts, fetchStoreData, store?.index_status, store?.platform, store?.platform_domain, storeId]);
+
+  const handleSyncNow = async () => {
+    if (!storeId) return;
+    setSyncing(true);
+    setError(null);
+    try {
+      await api.post(`/stores/${storeId}/sync`);
+      setStore((current) => current ? {
+        ...current,
+        index_status: 'pending',
+        index_progress_percent: 0,
+      } : current);
+      await fetchStoreData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to start catalog sync');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleTestSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store || !testQuery.trim()) return;
+    setTestLoading(true);
+    setTestError(null);
+    try {
+      const results = await api.post<WidgetSearchResult[]>('/widget/preview/search', {
+        store_id: store.id,
+        query: testQuery.trim(),
+        limit: 3,
+      });
+      setTestResults(results);
+    } catch (err: any) {
+      setTestResults([]);
+      setTestError(err.message || 'Live widget search failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   // Drag & Drop Handlers
   const handleDrag = (e: React.DragEvent) => {
@@ -227,14 +299,13 @@ export const StoreDetail: React.FC = () => {
   const getEmbedCode = (tab: TabType) => {
     const cleanStoreId = store.id;
     const widgetToken = store.widget_token;
-    const currentOrigin = window.location.origin;
     const apiV1Base = API_BASE_URL;
     
     switch(tab) {
       case 'html':
         return `<!-- Place this snippet inside your website's header or footer HTML -->
 <!-- 1. Include the search widget script -->
-<script src="${currentOrigin}/widget.js" id="ss-widget-script"></script>
+<script src="${WIDGET_SCRIPT_URL}" id="ss-widget-script"></script>
 
 <!-- 2. Initialize the widget with your credentials -->
 <script>
@@ -253,7 +324,7 @@ import { useEffect } from 'react';
 export function VeltSearchWidget() {
   useEffect(() => {
     const script = document.createElement('script');
-    script.src = "${currentOrigin}/widget.js";
+    script.src = "${WIDGET_SCRIPT_URL}";
     script.async = true;
     script.onload = () => {
       window.ssWidgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}', '${widgetToken}');
@@ -280,7 +351,7 @@ let widgetInstance = null;
 
 onMounted(() => {
   const script = document.createElement('script');
-  script.src = "${currentOrigin}/widget.js";
+  script.src = "${WIDGET_SCRIPT_URL}";
   script.async = true;
   script.onload = () => {
     widgetInstance = new window.SmartSearchWidget('${cleanStoreId}', '${apiV1Base}', '${widgetToken}');
@@ -355,6 +426,17 @@ const searchCatalog = async (userQuery) => {
           </div>
 
           <div className="flex items-center gap-6 divide-x divide-slate-100">
+            {store.platform === 'shopify' && store.platform_domain && (
+              <button
+                type="button"
+                onClick={handleSyncNow}
+                disabled={syncing || store.index_status === 'indexing'}
+                className="inline-flex items-center gap-2 px-3 py-2 border border-slate-200 bg-white hover:border-brand/40 hover:text-brand rounded-xl text-xs font-bold text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing || store.index_status === 'indexing' ? 'animate-spin' : ''}`} />
+                Sync now
+              </button>
+            )}
             <div className="px-4 first:pl-0">
               <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-mediumgray block">Vector Database Size</span>
               <span className="text-2xl font-black text-neutral-charcoal mt-0.5">
@@ -472,7 +554,7 @@ const searchCatalog = async (userQuery) => {
               </span>
             </div>
             <p className="text-xs text-purple-800 leading-relaxed max-w-2xl">
-              Velt AI is parsing your product descriptions, converting titles & tags to 1536-dimension embeddings, and indexing them in our vector engine. Do not navigate away.
+              Velt is converting your product titles, brands, categories, and descriptions into 384-dimension search embeddings. You can leave this page while indexing continues.
             </p>
             <div className="w-full bg-purple-100 rounded-full h-2 overflow-hidden">
               <div 
@@ -587,7 +669,7 @@ const searchCatalog = async (userQuery) => {
                     <span>Product Catalog List</span>
                   </h3>
                   <p className="text-xs text-neutral-mediumgray mt-0.5">
-                    Previewing vectorized items available for instant overlay client searches.
+                    Previewing vectorized items available for storefront searches.
                   </p>
                 </div>
 
@@ -758,6 +840,55 @@ const searchCatalog = async (userQuery) => {
                   <code>{getEmbedCode(activeSnippetTab)}</code>
                 </pre>
               </div>
+
+              <form onSubmit={handleTestSearch} className="space-y-3 border-t border-slate-800/80 pt-4">
+                <div>
+                  <label htmlFor="widget-test-query" className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                    Verify live search
+                  </label>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Uses the same public token and endpoint as the installed widget.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id="widget-test-query"
+                    type="search"
+                    value={testQuery}
+                    onChange={(e) => setTestQuery(e.target.value)}
+                    placeholder="Try a shopper query"
+                    className="min-w-0 flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand"
+                  />
+                  <button
+                    type="submit"
+                    disabled={testLoading || !testQuery.trim()}
+                    className="px-3 py-2 bg-brand hover:bg-brand-dark rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {testLoading ? 'Testing...' : 'Run test'}
+                  </button>
+                </div>
+                {testError && <p className="text-[10px] text-red-300">{testError}</p>}
+                {!testLoading && testResults.length > 0 && (
+                  <div className="space-y-2">
+                    {testResults.map((result) => (
+                      <div key={result.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
+                        <span className="truncate text-[11px] font-semibold text-slate-200">{result.title}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[9px] font-bold text-brand-light">{Math.round(result.score * 100)}%</span>
+                          {result.product_url && (
+                            <a href={result.product_url} target="_blank" rel="noreferrer" aria-label={`Open ${result.title}`}>
+                              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!testLoading && testQuery && !testError && testResults.length === 0 && (
+                  <p className="text-[10px] text-slate-400">No matching products returned.</p>
+                )}
+              </form>
 
               <div className="pt-2 flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-800/80">
                 <Link to={`/stores/${store.id}/settings`} className="flex items-center gap-1 hover:text-white font-bold transition-all text-brand-light">

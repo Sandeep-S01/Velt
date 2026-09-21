@@ -46,6 +46,7 @@ def create_new_product(
             "brand": db_product.brand,
             "image_url": db_product.image_url,
             "product_url": db_product.product_url,
+            "inventory_count": db_product.inventory_count,
             "is_active": db_product.is_active,
         }
         search_engine.index_store_products(store_id=db_product.store_id, products=[product_dict])
@@ -110,6 +111,7 @@ def update_existing_product(
             "brand": db_product.brand,
             "image_url": db_product.image_url,
             "product_url": db_product.product_url,
+            "inventory_count": db_product.inventory_count,
             "is_active": db_product.is_active,
         }
         search_engine.index_store_products(store_id=db_product.store_id, products=[product_dict])

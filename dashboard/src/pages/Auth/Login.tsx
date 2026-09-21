@@ -190,7 +190,7 @@ export const Login: React.FC = () => {
             </svg>
             <span className="text-xl font-bold">Velt</span>
           </Link>
-          <h2 className="text-2xl font-extrabold text-neutral-charcoal tracking-tight mt-2">Welcome Back</h2>
+          <h1 className="text-2xl font-extrabold text-neutral-charcoal tracking-tight mt-2">Welcome Back</h1>
           <p className="text-sm text-neutral-mediumgray font-semibold mt-1">Log in to manage your AI search console</p>
         </div>
 
@@ -257,9 +257,9 @@ export const Login: React.FC = () => {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-neutral-mediumgray font-semibold">
-          Don't have an account?{' '}
+          Have a beta invitation?{' '}
           <Link to="/signup" className="text-brand hover:underline font-bold">
-            Create an account
+            Redeem it
           </Link>
         </div>
       </div>

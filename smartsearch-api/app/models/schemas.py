@@ -2,11 +2,40 @@
 Pydantic schemas for API request/response validation.
 """
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from enum import Enum
 from urllib.parse import urlparse
+
+class WidgetConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    theme: Literal["light", "dark"] = "light"
+    primary_color: str = Field(default="#4F46E5", pattern=r"^#[0-9a-fA-F]{6}$")
+    position: Literal["bottom-left", "bottom-right"] = "bottom-right"
+    border_radius: Literal["sm", "md", "lg"] = "md"
+    placeholder_text: str = Field(default="Search for products...", min_length=1, max_length=100)
+    show_filters: bool = False
+    show_price: bool = True
+    show_rating: bool = False
+    enable_autocomplete: bool = True
+
+
+class StoreSearchConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    min_score_threshold: float = Field(default=0.25, ge=0, le=1)
+    exclude_out_of_stock: bool = False
+
+
+class WidgetConfigInput(WidgetConfig):
+    model_config = ConfigDict(extra="forbid")
+
+
+class StoreSearchConfigInput(StoreSearchConfig):
+    model_config = ConfigDict(extra="forbid")
+
 
 # Store schemas
 class StoreBase(BaseModel):
@@ -15,11 +44,12 @@ class StoreBase(BaseModel):
     platform_store_id: Optional[str] = None
     is_active: bool = True
     sync_frequency_hours: int = 24
-    widget_config: Optional[Dict[str, Any]] = None
-    search_config: Optional[Dict[str, Any]] = None
+    widget_config: Optional[WidgetConfig] = None
+    search_config: Optional[StoreSearchConfig] = None
 
 class StoreCreate(StoreBase):
-    pass
+    widget_config: Optional[WidgetConfigInput] = None
+    search_config: Optional[StoreSearchConfigInput] = None
 
 class StoreUpdate(BaseModel):
     name: Optional[str] = None
@@ -27,8 +57,8 @@ class StoreUpdate(BaseModel):
     platform_store_id: Optional[str] = None
     is_active: Optional[bool] = None  # Fixed: was str, should be bool
     sync_frequency_hours: Optional[int] = None
-    widget_config: Optional[Dict[str, Any]] = None
-    search_config: Optional[Dict[str, Any]] = None
+    widget_config: Optional[WidgetConfigInput] = None
+    search_config: Optional[StoreSearchConfigInput] = None
     widget_allowed_origins: Optional[List[str]] = None
 
     @field_validator("widget_allowed_origins")
@@ -51,6 +81,11 @@ class StoreResponse(StoreBase):
     owner_user_id: Optional[str] = None
     widget_token: str
     widget_allowed_origins: Optional[List[str]] = None
+    platform_domain: Optional[str] = None
+    index_status: str = "pending"
+    index_progress_percent: int = 0
+    total_product_count: int = 0
+    indexed_product_count: int = 0
     last_sync_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -149,6 +184,12 @@ class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=200)
     password: str = Field(..., min_length=8)
+    invite_code: Optional[str] = Field(default=None, max_length=256)
+    accept_terms: Literal[True]
+
+
+class AccountDeleteRequest(BaseModel):
+    password: str = Field(..., min_length=1, max_length=256)
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -164,10 +205,28 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-# Search schemas (existing ones from main.py)
+# Search schemas
+class SearchFilters(BaseModel):
+    price_min: Optional[float] = Field(default=None, ge=0)
+    price_max: Optional[float] = Field(default=None, ge=0)
+    category: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    in_stock: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_price_range(self):
+        if (
+            self.price_min is not None
+            and self.price_max is not None
+            and self.price_min > self.price_max
+        ):
+            raise ValueError("price_min cannot be greater than price_max")
+        return self
+
+
 class SearchRequest(BaseModel):
-    query: str
-    limit: Optional[int] = 5
+    query: str = Field(..., min_length=1, max_length=200)
+    limit: Optional[int] = Field(default=5, ge=1, le=100)
+    filters: Optional[SearchFilters] = None
 
 class SearchResult(BaseModel):
     id: str

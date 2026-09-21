@@ -4,9 +4,11 @@ API routes for Shopify OAuth authentication and setup.
 
 import json
 import secrets
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db, get_redis
@@ -25,25 +27,19 @@ from app.utils.security import get_current_active_user
 router = APIRouter(prefix="/shopify", tags=["shopify_auth"])
 _test_oauth_states: dict[str, str] = {}
 
-@router.get("/authorize")
-def shopify_authorize(
-    shop: str = Query(..., description="The shop name or shop domain (e.g., store-name.myshopify.com)"),
-    current_user=Depends(get_current_active_user),
-):
-    """
-    Redirect the merchant to Shopify for authorization.
-    """
-    # Clean the shop domain name
+
+class ShopifyAuthorizeRequest(BaseModel):
+    shop: str = Field(..., min_length=1, max_length=255)
+
+
+def _create_authorization_url(shop: str, user_id: str) -> str:
     try:
         shop_domain = normalize_shop_domain(shop)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Generate a unique state token to prevent CSRF
     state_token = secrets.token_urlsafe(32)
-    state_data = json.dumps({"user_id": current_user.id, "shop": shop_domain})
-    
-    # Save the state in Redis with 10-minute expiry
+    state_data = json.dumps({"user_id": user_id, "shop": shop_domain})
     redis_client = get_redis()
     if redis_client:
         try:
@@ -60,10 +56,26 @@ def shopify_authorize(
     else:
         raise HTTPException(status_code=503, detail="OAuth state service unavailable")
 
-    # Build auth URL
-    auth_url = get_shopify_auth_url(shop_domain, state_token)
-    
-    return RedirectResponse(url=auth_url)
+    return get_shopify_auth_url(shop_domain, state_token)
+
+@router.get("/authorize")
+def shopify_authorize(
+    shop: str = Query(..., description="The shop name or shop domain (e.g., store-name.myshopify.com)"),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Redirect the merchant to Shopify for authorization.
+    """
+    return RedirectResponse(url=_create_authorization_url(shop, current_user.id))
+
+
+@router.post("/authorize-url")
+def shopify_authorize_url(
+    payload: ShopifyAuthorizeRequest,
+    current_user=Depends(get_current_active_user),
+):
+    """Create a Shopify authorization URL for dashboard clients."""
+    return {"authorization_url": _create_authorization_url(payload.shop, current_user.id)}
 
 @router.get("/callback")
 def shopify_callback(
@@ -159,10 +171,18 @@ def shopify_callback(
     # Trigger Celery product sync task in the background
     sync_shopify_products_task.delay(store.id)
 
-    return {
+    result = {
         "status": "success",
         "message": "Store authorized and product sync initiated.",
         "store_id": store.id,
         "platform_domain": store.platform_domain,
         "index_status": store.index_status
     }
+    if settings.TESTING:
+        return result
+
+    dashboard_url = settings.DASHBOARD_BASE_URL.rstrip("/")
+    return RedirectResponse(
+        url=f"{dashboard_url}/stores/{quote(store.id)}?shopify=connected",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

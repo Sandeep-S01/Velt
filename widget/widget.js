@@ -8,15 +8,18 @@
         theme: 'light',
         primary_color: '#4F46E5',
         position: 'bottom-right',
+        border_radius: 'md',
         placeholder_text: 'Search for products...',
-        show_filters: true,
+        show_filters: false,
         show_price: true,
-        show_rating: true,
+        show_rating: false,
         enable_autocomplete: true
       };
       this.isOpen = false;
       this.currentQueryEventToken = null;
       this.debounceTimeout = null;
+      this.autocompleteController = null;
+      this.searchController = null;
 
       this.init();
     }
@@ -47,6 +50,7 @@
       if (!/^#[0-9a-f]{6}$/i.test(this.config.primary_color)) this.config.primary_color = '#4F46E5';
       if (!['light', 'dark'].includes(this.config.theme)) this.config.theme = 'light';
       if (!['bottom-left', 'bottom-right'].includes(this.config.position)) this.config.position = 'bottom-right';
+      if (!['sm', 'md', 'lg'].includes(this.config.border_radius)) this.config.border_radius = 'md';
       this.config.placeholder_text = String(this.config.placeholder_text || 'Search for products...').slice(0, 100);
     }
 
@@ -73,6 +77,8 @@
           bottom: 24px;
           width: 52px;
           height: 52px;
+          padding: 0;
+          border: none;
           border-radius: 50%;
           color: white;
           display: flex;
@@ -86,6 +92,12 @@
         #ss-widget-fab:hover {
           transform: scale(1.05);
           box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
+        }
+        #ss-widget-fab:focus-visible,
+        .ss-close-btn:focus-visible,
+        .ss-suggestion-item:focus-visible {
+          outline: 3px solid ${this.config.primary_color};
+          outline-offset: 2px;
         }
         #ss-widget-fab svg {
           width: 22px;
@@ -122,7 +134,7 @@
           color: ${this.config.theme === 'dark' ? '#F9FAFB' : '#111827'};
           width: 100%;
           max-width: 600px;
-          border-radius: 16px;
+          border-radius: ${this.config.border_radius === 'sm' ? '8px' : this.config.border_radius === 'lg' ? '24px' : '16px'};
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
           border: 1px solid ${this.config.theme === 'dark' ? '#374151' : '#E5E7EB'};
           overflow: hidden;
@@ -198,6 +210,11 @@
           display: block;
         }
         .ss-suggestion-item {
+          width: 100%;
+          border: none;
+          background: transparent;
+          text-align: left;
+          font-family: system-ui, -apple-system, sans-serif;
           display: flex;
           align-items: center;
           gap: 10px;
@@ -225,7 +242,7 @@
         .ss-results-empty {
           padding: 40px 24px;
           text-align: center;
-          color: #9CA3AF;
+          color: #4B5563;
           font-size: 14px;
         }
         .ss-card {
@@ -334,8 +351,12 @@
 
     renderElements() {
       // 1. Create Floating Button
-      const fab = document.createElement('div');
+      const fab = document.createElement('button');
       fab.id = 'ss-widget-fab';
+      fab.type = 'button';
+      fab.setAttribute('aria-label', 'Open product search');
+      fab.setAttribute('aria-controls', 'ss-search-overlay');
+      fab.setAttribute('aria-expanded', 'false');
       fab.style.backgroundColor = this.config.primary_color;
       
       // Position config
@@ -356,6 +377,10 @@
       // 2. Create Search Overlay Modal
       const overlay = document.createElement('div');
       overlay.id = 'ss-search-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-label', 'Product search');
+      overlay.setAttribute('aria-hidden', 'true');
       overlay.innerHTML = `
         <div class="ss-modal">
           <div class="ss-header">
@@ -363,8 +388,8 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="search" class="ss-input" autocomplete="off" />
-            <button class="ss-close-btn">
+            <input type="search" class="ss-input" autocomplete="off" aria-label="Search products" />
+            <button type="button" class="ss-close-btn" aria-label="Close product search">
               <svg viewBox="0 0 24 24">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -405,6 +430,23 @@
         }
       });
 
+      this.overlayEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab' || !this.isOpen) return;
+        const focusable = Array.from(
+          this.overlayEl.querySelectorAll('button:not([disabled]), input:not([disabled]), a[href]')
+        ).filter((element) => element.offsetParent !== null);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
+
       // Hotkey (Cmd+K or Ctrl+K)
       window.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -434,17 +476,22 @@
     openSearch() {
       this.isOpen = true;
       this.overlayEl.classList.add('ss-open');
+      this.overlayEl.setAttribute('aria-hidden', 'false');
+      this.fabEl.setAttribute('aria-expanded', 'true');
       setTimeout(() => this.inputEl.focus(), 50);
     }
 
     closeSearch() {
       this.isOpen = false;
       this.overlayEl.classList.remove('ss-open');
+      this.overlayEl.setAttribute('aria-hidden', 'true');
+      this.fabEl.setAttribute('aria-expanded', 'false');
       this.inputEl.value = '';
       this.resultsEl.innerHTML = '<div class="ss-results-empty">Type something to search by meaning...</div>';
       this.autocompleteEl.classList.remove('ss-active');
       this.autocompleteEl.innerHTML = '';
       this.currentQueryEventToken = null;
+      this.fabEl.focus();
     }
 
     handleQueryChange(query) {
@@ -461,16 +508,20 @@
       if (!this.config.enable_autocomplete) return;
 
       this.debounceTimeout = setTimeout(async () => {
+        if (this.autocompleteController) this.autocompleteController.abort();
+        const controller = new AbortController();
+        this.autocompleteController = controller;
         try {
           const resp = await fetch(
             `${this.apiBase}/widget/autocomplete?store_id=${this.storeId}&query=${encodeURIComponent(query)}`,
-            { headers: { 'X-Widget-Token': this.widgetToken } }
+            { headers: { 'X-Widget-Token': this.widgetToken }, signal: controller.signal }
           );
           if (resp.ok) {
             const data = await resp.json();
             this.renderSuggestions(data.suggestions, query);
           }
         } catch (err) {
+          if (err.name === 'AbortError') return;
           console.error('Autocomplete request failed', err);
         }
       }, 150);
@@ -486,10 +537,10 @@
       this.autocompleteEl.innerHTML = suggestions
         .map(
           (s) => `
-            <div class="ss-suggestion-item" data-value="${this.escapeHtml(s)}">
+            <button type="button" class="ss-suggestion-item" data-value="${this.escapeHtml(s)}">
               <span class="ss-bulb">💡</span>
               <span>${this.escapeHtml(s)}</span>
-            </div>
+            </button>
           `
         )
         .join('');
@@ -510,6 +561,10 @@
     async executeSearch(query) {
       if (!query) return;
 
+      if (this.searchController) this.searchController.abort();
+      const controller = new AbortController();
+      this.searchController = controller;
+
       this.autocompleteEl.classList.remove('ss-active');
       this.loaderEl.classList.add('ss-active');
       this.resultsEl.innerHTML = '';
@@ -526,20 +581,24 @@
             store_id: this.storeId,
             query: query,
             limit: 5
-          })
+          }),
+          signal: controller.signal
         });
 
-        if (!response.ok) throw new Error('Search failed');
+        if (!response.ok) throw new Error(`Search request failed with status ${response.status}`);
 
         // Extract query log ID from CORS response headers for click conversion attribution
         this.currentQueryEventToken = response.headers.get('X-Query-Event-Token');
 
         const products = await response.json();
         this.renderResults(products);
-      } catch {
+      } catch (err) {
+        if (err.name === 'AbortError') return;
         this.resultsEl.innerHTML = `<div class="ss-results-empty" style="color: #EF4444">Error loading results. Please try again.</div>`;
       } finally {
-        this.loaderEl.classList.remove('ss-active');
+        if (this.searchController === controller) {
+          this.loaderEl.classList.remove('ss-active');
+        }
       }
     }
 
@@ -593,16 +652,18 @@
     async trackClick(productId) {
       if (!this.currentQueryEventToken) return;
 
+      const payload = JSON.stringify({
+        query_event_token: this.currentQueryEventToken,
+        clicked_product_id: productId
+      });
       try {
         await fetch(`${this.apiBase}/analytics/click`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            query_event_token: this.currentQueryEventToken,
-            clicked_product_id: productId
-          })
+          body: payload,
+          keepalive: true
         });
       } catch (err) {
         console.error('Click conversion tracking failed', err);

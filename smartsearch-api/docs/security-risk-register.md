@@ -1,15 +1,17 @@
 # Security Risk Register
 
-Date: 2026-07-11
+Date: 2026-09-21
 
 ## Open Risks
 
-### `PYSEC-2026-311` - ChromaDB pre-auth code injection advisory
+### ChromaDB server advisories
 
 - Package: `chromadb==1.5.9`
+- Advisories: `PYSEC-2026-311`, `PYSEC-2026-3813`, `PYSEC-2026-3814`, and `PYSEC-2026-3815`
 - Status: Accepted for private beta only
 - Fixed version: None available at review time
 - Application usage: embedded `chromadb.PersistentClient`
+- Affected server surfaces include Chroma authentication/authorization, tenant-scoped HTTP operations, collection updates, and remote model configuration. Velt does not expose or call these HTTP administration surfaces.
 - Exposure decision: Chroma HTTP server must not be exposed publicly, to merchants, or to the dashboard network.
 - Required controls:
   - Keep Chroma bound to local process or private volume only.
@@ -20,6 +22,11 @@ Date: 2026-07-11
 - Public launch condition: either upgrade to a non-vulnerable Chroma release, replace Chroma with a managed/private vector service, or complete a formal risk acceptance for the exact deployment topology.
 
 ## Closed Risks
+
+### `PYSEC-2026-3552` - `cryptography` PKCS#7 decryption oracle
+
+- Resolution: upgraded `cryptography` from `49.0.0` to fixed version `50.0.0`.
+- Velt does not decrypt PKCS#7 EnvelopedData, but the dependency was upgraded so the release does not rely on reachability-based acceptance.
 
 ### `python-jose` transitive `ecdsa` advisory
 

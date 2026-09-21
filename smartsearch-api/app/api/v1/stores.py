@@ -2,13 +2,14 @@
 API routes for store management.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
 import csv
 import io
 
 from app.core.database import get_db
+from app.core.search_engine import SemanticSearchEngine
 from app.utils.security import (
     api_key_prefix,
     get_current_active_user,
@@ -31,6 +32,11 @@ from app.services.store_service import (
 )
 
 router = APIRouter(prefix="/stores", tags=["stores"])
+
+
+def get_search_engine(request: Request) -> SemanticSearchEngine:
+    """Dependency to retrieve search engine singleton."""
+    return request.app.state.search_engine
 
 @router.post("/", response_model=StoreResponse)
 def create_new_store(
@@ -79,23 +85,45 @@ def update_existing_store(
 def delete_existing_store(
     store_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_active_user)
+    current_user: dict = Depends(get_current_active_user),
+    search_engine: SemanticSearchEngine = Depends(get_search_engine),
 ):
     """Delete a store."""
     get_owned_store(db, store_id, current_user.id)
+    search_engine.delete_store_index(store_id)
     success = delete_store(db, store_id=store_id)
     if not success:
         raise HTTPException(status_code=404, detail="Store not found")
     return {"message": "Store deleted successfully"}
 
-from fastapi import Request
-from app.core.search_engine import SemanticSearchEngine
+
+@router.post("/{store_id}/sync", status_code=status.HTTP_202_ACCEPTED)
+def sync_store_catalog(
+    store_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Queue a fresh catalog sync for an authorized Shopify store."""
+    store = get_owned_store(db, store_id, current_user.id)
+    if store.platform != "shopify" or not store.api_key_encrypted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This store is not connected to Shopify",
+        )
+    if store.index_status == "indexing":
+        return {"status": "indexing", "message": "Catalog sync is already running"}
+
+    store.index_status = "pending"
+    store.index_progress_percent = 0
+    db.commit()
+
+    from app.tasks.sync import sync_shopify_products_task
+
+    sync_shopify_products_task.delay(store.id)
+    return {"status": "queued", "message": "Catalog sync queued"}
+
 from app.services.product_service import get_product, create_product, update_product
 from app.models.schemas import ProductCreate, ProductUpdate
-
-def get_search_engine(request: Request) -> SemanticSearchEngine:
-    """Dependency to retrieve search engine singleton."""
-    return request.app.state.search_engine
 
 @router.post("/{store_id}/products/upload")
 async def upload_products_csv(

@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, create_tables
 from app.models.database import User, Store, APIKey, Product
 from app.services.user_service import pwd_context
@@ -49,22 +48,16 @@ def seed():
                     "theme": "light",
                     "primary_color": "#4F46E5",
                     "position": "bottom-right",
+                    "border_radius": "md",
                     "placeholder_text": "Search for products...",
-                    "show_filters": True,
+                    "show_filters": False,
                     "show_price": True,
-                    "show_rating": True,
-                    "results_per_page": 10,
-                    "enable_autocomplete": True,
-                    "enable_voice_search": False
+                    "show_rating": False,
+                    "enable_autocomplete": True
                 },
                 search_config={
                     "min_score_threshold": 0.25,
-                    "max_results": 50,
-                    "enable_synonyms": True,
-                    "enable_spell_check": True,
-                    "fallback_to_keyword": True,
-                    "boost_recent": False,
-                    "boost_popular": False
+                    "exclude_out_of_stock": False
                 }
             )
             db.add(store)

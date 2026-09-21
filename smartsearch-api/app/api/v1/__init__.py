@@ -4,7 +4,7 @@ Main API router that includes all version 1 endpoints.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, products, stores, search, ingest, shopify_auth, webhooks, upload, widget, analytics
+from app.api.v1 import analytics, auth, demo, ingest, products, search, shopify_auth, stores, upload, webhooks, widget
 
 # Create main API router
 api_router = APIRouter()
@@ -20,6 +20,7 @@ api_router.include_router(webhooks.router, prefix="", tags=["webhooks"])
 api_router.include_router(upload.router, prefix="", tags=["upload"])
 api_router.include_router(widget.router, prefix="", tags=["widget"])
 api_router.include_router(analytics.router, prefix="", tags=["analytics"])
+api_router.include_router(demo.router, prefix="", tags=["demo"])
 
 # Health check endpoint
 @api_router.get("/health", tags=["health"])
