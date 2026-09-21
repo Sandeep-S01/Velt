@@ -74,7 +74,7 @@ export const Layout: React.FC<LayoutProps> = ({
       <aside className={`fixed inset-y-0 left-0 w-72 bg-white border-r border-neutral-lightgray flex flex-col justify-between shrink-0 z-40 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        <div className="flex flex-col flex-1 overflow-y-auto">
+        <div className="flex flex-col flex-1 overflow-y-auto scrollbar-light">
           
           {/* Logo Header */}
           <div className="h-16 flex items-center px-6 border-b border-neutral-lightgray/80 justify-between shrink-0">
@@ -347,7 +347,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </header>
 
         {/* Viewport content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 relative">
+        <main className="flex-1 overflow-y-auto scrollbar-light p-4 lg:p-8 relative">
           {children}
         </main>
       </div>

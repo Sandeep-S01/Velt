@@ -230,7 +230,13 @@
         }
         .ss-suggestion-item span.ss-bulb {
           color: ${this.config.primary_color};
-          font-size: 14px;
+          display: inline-flex;
+          flex: 0 0 auto;
+        }
+        .ss-suggestion-item span.ss-bulb svg {
+          width: 16px;
+          height: 16px;
+          stroke: currentColor;
         }
 
         /* Results Catalog Container */
@@ -244,6 +250,12 @@
           text-align: center;
           color: #4B5563;
           font-size: 14px;
+        }
+        .ss-results-empty-icon {
+          width: 28px;
+          height: 28px;
+          margin: 0 auto 10px;
+          color: ${this.config.primary_color};
         }
         .ss-card {
           display: flex;
@@ -275,7 +287,11 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 24px;
+          color: ${this.config.theme === 'dark' ? '#CBD5E1' : '#64748B'};
+        }
+        .ss-card-fallback-img svg {
+          width: 26px;
+          height: 26px;
         }
         .ss-card-details {
           flex: 1;
@@ -538,7 +554,12 @@
         .map(
           (s) => `
             <button type="button" class="ss-suggestion-item" data-value="${this.escapeHtml(s)}">
-              <span class="ss-bulb">💡</span>
+              <span class="ss-bulb" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 3-1.1 3.1a2 2 0 0 1-1.2 1.2L6.6 8.4l3.1 1.1a2 2 0 0 1 1.2 1.2L12 13.8l1.1-3.1a2 2 0 0 1 1.2-1.2l3.1-1.1-3.1-1.1a2 2 0 0 1-1.2-1.2L12 3Z"/>
+                  <path d="m19 15-.6 1.6a1 1 0 0 1-.6.6l-1.6.6 1.6.6a1 1 0 0 1 .6.6l.6 1.6.6-1.6a1 1 0 0 1 .6-.6l1.6-.6-1.6-.6a1 1 0 0 1-.6-.6L19 15Z"/>
+                </svg>
+              </span>
               <span>${this.escapeHtml(s)}</span>
             </button>
           `
@@ -606,7 +627,9 @@
       if (!products || products.length === 0) {
         this.resultsEl.innerHTML = `
           <div class="ss-results-empty">
-            <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
+            <svg class="ss-results-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/><path d="M8.5 11h5"/>
+            </svg>
             No results found. Try searching for something else.
           </div>
         `;
@@ -627,7 +650,7 @@
             <a href="${productUrl}" class="ss-card" data-product-id="${productId}">
               ${imageUrl !== '#'
                 ? `<img src="${imageUrl}" alt="${title}" class="ss-card-img" />`
-                : `<div class="ss-card-fallback-img">📦</div>`
+                : `<div class="ss-card-fallback-img" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.3 9 5.2"/><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>`
               }
               <div class="ss-card-details">
                 <h4 class="ss-card-title">${title}</h4>

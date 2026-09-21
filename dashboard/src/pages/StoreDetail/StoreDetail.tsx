@@ -8,7 +8,7 @@ import {
   UploadCloud, FileSpreadsheet, RefreshCw, Key, 
   Database, ShieldCheck, AlertCircle, Sparkles, ShoppingBag,
   Code, Copy, Check, Eye, EyeOff, Search, 
-  ChevronRight, ArrowLeft, ArrowUpRight
+  ChevronRight, ArrowLeft, ArrowUpRight, Package
 } from 'lucide-react';
 
 interface ProductModel {
@@ -734,8 +734,8 @@ const searchCatalog = async (userQuery) => {
                               {prod.image_url ? (
                                 <img src={prod.image_url} alt={prod.title} className="w-8 h-8 rounded-lg border border-slate-100 object-cover shrink-0" />
                               ) : (
-                                <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200/60 flex items-center justify-center text-[10px] text-slate-400 shrink-0">
-                                  📦
+                                <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200/60 flex items-center justify-center text-slate-400 shrink-0">
+                                  <Package className="h-4 w-4" aria-hidden="true" />
                                 </div>
                               )}
                               <span className="font-semibold text-slate-800 truncate max-w-[180px]">{prod.title}</span>
@@ -771,11 +771,11 @@ const searchCatalog = async (userQuery) => {
           <div className="space-y-8">
             
             {/* Copy-Paste Widget Integrator Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-xl space-y-4 relative overflow-hidden">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 text-white shadow-xl space-y-5 relative overflow-hidden">
               <div className="absolute right-0 top-0 w-32 h-32 bg-brand/10 rounded-full blur-2xl pointer-events-none"></div>
               
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-sm font-bold flex items-center gap-1.5 text-slate-150">
                     <Code className="w-4 h-4 text-brand-light" />
                     <span>Widget Embed Setup</span>
@@ -811,7 +811,7 @@ const searchCatalog = async (userQuery) => {
               </div>
 
               {/* Snippet Tabs */}
-              <div className="border-b border-slate-800 flex gap-2">
+              <div className="border-b border-slate-800 flex gap-3 overflow-x-auto scrollbar-dark">
                 {(['html', 'react', 'vue', 'api'] as TabType[]).map((tab) => (
                   <button
                     key={tab}
@@ -828,15 +828,16 @@ const searchCatalog = async (userQuery) => {
               </div>
 
               {/* Code Container */}
-              <div className="relative group">
+              <div className="relative min-w-0 group">
                 <button
                   onClick={() => triggerCopy(getEmbedCode(activeSnippetTab), 'snippet')}
-                  className="absolute right-3 top-3 p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-350 hover:text-white border border-slate-700/80 transition-all cursor-pointer"
+                  className="absolute right-3 top-3 z-10 p-2 bg-slate-800/95 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white border border-slate-700 transition-all cursor-pointer shadow-lg"
+                  aria-label="Copy embed snippet"
                 >
                   {copiedText === 'snippet' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
                 
-                <pre className="bg-black/50 border border-slate-800 rounded-xl p-4 font-mono text-[10px] text-slate-300 leading-relaxed overflow-x-auto select-all max-h-56">
+                <pre className="bg-slate-950/80 border border-slate-700/80 rounded-xl px-4 pb-4 pt-14 font-mono text-[11px] text-slate-300 leading-5 overflow-auto scrollbar-dark select-all max-h-72 min-h-48">
                   <code>{getEmbedCode(activeSnippetTab)}</code>
                 </pre>
               </div>
@@ -850,7 +851,7 @@ const searchCatalog = async (userQuery) => {
                     Uses the same public token and endpoint as the installed widget.
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     id="widget-test-query"
                     type="search"
@@ -862,7 +863,7 @@ const searchCatalog = async (userQuery) => {
                   <button
                     type="submit"
                     disabled={testLoading || !testQuery.trim()}
-                    className="px-3 py-2 bg-brand hover:bg-brand-dark rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                    className="px-4 py-2 bg-brand hover:bg-brand-dark rounded-lg text-xs font-bold text-white disabled:opacity-50 sm:shrink-0"
                   >
                     {testLoading ? 'Testing...' : 'Run test'}
                   </button>
@@ -890,7 +891,7 @@ const searchCatalog = async (userQuery) => {
                 )}
               </form>
 
-              <div className="pt-2 flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-800/80">
+              <div className="pt-3 flex flex-col sm:flex-row sm:justify-between gap-3 text-[10px] text-slate-400 border-t border-slate-800/80">
                 <Link to={`/stores/${store.id}/settings`} className="flex items-center gap-1 hover:text-white font-bold transition-all text-brand-light">
                   <span>Customizer widget UI settings</span>
                   <ChevronRight className="w-3.5 h-3.5" />

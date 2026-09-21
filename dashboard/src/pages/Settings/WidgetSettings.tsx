@@ -5,7 +5,7 @@ import { Layout } from '../../components/Layout';
 import type { StoreModel } from '../Stores/StoreList';
 import { 
   Eye, Sliders, CheckCircle, RefreshCw, AlertCircle, Laptop, 
-  ArrowLeft, Sparkles
+  ArrowLeft, Sparkles, Sun, Moon, Search, ShoppingCart, Footprints, Smartphone
 } from 'lucide-react';
 
 interface WidgetConfig {
@@ -178,7 +178,7 @@ export const WidgetSettings: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Left Configuration Panel */}
-          <form onSubmit={handleSave} className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-6">
+          <form onSubmit={handleSave} className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-6 shadow-sm space-y-6">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
               <Sliders className="w-4 h-4 text-brand" />
               <h2 className="text-sm font-bold text-neutral-charcoal">Widget Configuration Options</h2>
@@ -195,24 +195,26 @@ export const WidgetSettings: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setConfig({ ...config, theme: 'light' })}
-                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                    className={`min-h-11 px-3 py-2.5 rounded-xl border text-xs font-bold transition-all inline-flex items-center justify-center gap-2 ${
                       config.theme === 'light'
                         ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/5'
                         : 'border-slate-200 hover:border-slate-350 bg-slate-50/50 text-neutral-darkgray'
                     }`}
                   >
-                    ☀️ Light UI
+                    <Sun className="h-4 w-4" aria-hidden="true" />
+                    <span>Light UI</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfig({ ...config, theme: 'dark' })}
-                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold text-center transition-all ${
+                    className={`min-h-11 px-3 py-2.5 rounded-xl border text-xs font-bold transition-all inline-flex items-center justify-center gap-2 ${
                       config.theme === 'dark'
                         ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/5'
                         : 'border-slate-200 hover:border-slate-350 bg-slate-50/50 text-neutral-darkgray'
                     }`}
                   >
-                    🌙 Dark UI
+                    <Moon className="h-4 w-4" aria-hidden="true" />
+                    <span>Dark UI</span>
                   </button>
                 </div>
               </div>
@@ -434,10 +436,10 @@ export const WidgetSettings: React.FC = () => {
           </form>
 
           {/* Right Live Mockup Interactive Preview */}
-          <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col space-y-6">
+          <div className="lg:col-span-7 min-w-0 bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-6 shadow-sm flex flex-col space-y-6">
             
             {/* Header controls device preview */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-brand" />
                 <h3 className="text-sm font-bold text-neutral-charcoal">Interactive Live Preview</h3>
@@ -463,22 +465,19 @@ export const WidgetSettings: React.FC = () => {
                   }`}
                   title="Mobile Preview"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <rect x="5" y="2" width="14" height="20" rx="2" strokeWidth="2"/>
-                    <path d="M12 18h.01" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
+                  <Smartphone className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Dynamic Sized Container Frame */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-8 flex items-center justify-center min-h-[500px] transition-all">
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 sm:p-6 xl:p-8 flex items-center justify-center min-h-[430px] sm:min-h-[500px] transition-all overflow-hidden">
               
               {/* Outer Viewport Box */}
               <div 
                 className={`border bg-white shadow-xl transition-all flex flex-col justify-between overflow-hidden ${
                   previewDevice === 'mobile' 
-                    ? 'w-[320px] h-[450px] rounded-2xl' 
+                    ? 'w-full max-w-[320px] h-[450px] rounded-2xl'
                     : 'w-full max-w-lg h-[400px] rounded-xl'
                 } ${
                   config.theme === 'dark' ? 'bg-slate-950 border-slate-850 text-slate-200' : 'bg-white border-slate-200 text-neutral-charcoal'
@@ -493,14 +492,16 @@ export const WidgetSettings: React.FC = () => {
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
                     <span>Merchant Storefront</span>
                   </div>
-                  <div className="flex items-center gap-3 text-neutral-mediumgray">
-                    <span>🔍</span>
-                    <span>🛒</span>
+                  <div className="flex items-center gap-3 text-neutral-mediumgray" aria-label="Storefront actions">
+                    <Search className="h-4 w-4" aria-hidden="true" />
+                    <ShoppingCart className="h-4 w-4" aria-hidden="true" />
                   </div>
                 </div>
 
                 {/* Simulated Widget Content panel */}
-                <div className="p-5 flex-1 space-y-4 flex flex-col overflow-y-auto justify-start">
+                <div className={`p-4 sm:p-5 flex-1 space-y-4 flex flex-col overflow-y-auto justify-start ${
+                  config.theme === 'dark' ? 'scrollbar-dark' : 'scrollbar-light'
+                }`}>
                   
                   {/* Custom Search Box */}
                   <div 
@@ -509,7 +510,7 @@ export const WidgetSettings: React.FC = () => {
                     }`}
                     style={{ borderLeftWidth: '3px', borderLeftColor: config.primary_color }}
                   >
-                    <span className="text-neutral-mediumgray text-xs">🔍</span>
+                    <Search className="h-4 w-4 shrink-0 text-neutral-mediumgray" aria-hidden="true" />
                     <span className="text-xs text-neutral-mediumgray font-semibold italic">{config.placeholder_text}</span>
                   </div>
 
@@ -541,8 +542,12 @@ export const WidgetSettings: React.FC = () => {
                   <div className={`border p-3.5 flex gap-3.5 items-center shadow-sm ${getRadiusClass()} ${
                     config.theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200/80'
                   }`}>
-                    <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200/60 flex items-center justify-center text-base shrink-0">
-                      🏃‍♂️
+                    <div className={`w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 ${
+                      config.theme === 'dark'
+                        ? 'bg-slate-800 border-slate-700 text-slate-300'
+                        : 'bg-slate-100 border-slate-200/60 text-slate-500'
+                    }`}>
+                      <Footprints className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div className="space-y-1 overflow-hidden flex-1">
                       <div className={`font-bold text-xs truncate ${config.theme === 'dark' ? 'text-white' : 'text-neutral-charcoal'}`}>
@@ -584,7 +589,7 @@ export const WidgetSettings: React.FC = () => {
                       boxShadow: `0 4px 14px ${config.primary_color}45`
                     }}
                   >
-                    🔍
+                    <Search className="h-4 w-4" aria-hidden="true" />
                   </div>
                 </div>
 

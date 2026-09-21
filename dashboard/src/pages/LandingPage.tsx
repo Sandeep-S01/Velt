@@ -13,15 +13,18 @@ import {
   Cpu,
   Database,
   ExternalLink,
+  Footprints,
   Layers,
   LayoutGrid,
-  Sparkles
+  Shirt,
+  Sparkles,
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
 
 interface SearchDemoProduct {
   title: string;
   price: string;
-  image: string;
   matchScore: string;
   category: string;
   tags: string[];
@@ -57,25 +60,25 @@ const DEMO_PRODUCTS: Record<string, {
   [PRESET_QUERIES.jacket]: {
     detected: { category: "Jacket", color: "Any", intent: "Waterproof / Lightweight", budget: "Any" },
     products: [
-      { title: "StormShield Pro Shell", price: "$110.00", image: "🧥", matchScore: "99% Match", category: "Jacket", tags: ["Rainproof", "Active Fit"] },
-      { title: "Pac-lite Windbreaker", price: "$89.00", image: "🧥", matchScore: "96% Match", category: "Jacket", tags: ["Windproof", "Breathable"] },
-      { title: "Trail-Ready Raincoat", price: "$120.00", image: "🧥", matchScore: "94% Match", category: "Jacket", tags: ["Stormproof", "Tech Pack"] }
+      { title: "StormShield Pro Shell", price: "$110.00", matchScore: "99% Match", category: "Jacket", tags: ["Rainproof", "Active Fit"] },
+      { title: "Pac-lite Windbreaker", price: "$89.00", matchScore: "96% Match", category: "Jacket", tags: ["Windproof", "Breathable"] },
+      { title: "Trail-Ready Raincoat", price: "$120.00", matchScore: "94% Match", category: "Jacket", tags: ["Stormproof", "Tech Pack"] }
     ]
   },
   [PRESET_QUERIES.shoes]: {
     detected: { category: "Shoes", color: "Black", intent: "Office / Professional", budget: "< $100" },
     products: [
-      { title: "Derby Leather Shoes", price: "$89.00", image: "👞", matchScore: "98% Match", category: "Shoes", tags: ["Leather", "Formal"] },
-      { title: "Sleek Oxford Loafers", price: "$75.00", image: "👞", matchScore: "94% Match", category: "Shoes", tags: ["Slip-on", "Office"] },
-      { title: "Classic Dress Brogues", price: "$95.00", image: "👞", matchScore: "91% Match", category: "Shoes", tags: ["Brogue", "Cushioned"] }
+      { title: "Derby Leather Shoes", price: "$89.00", matchScore: "98% Match", category: "Shoes", tags: ["Leather", "Formal"] },
+      { title: "Sleek Oxford Loafers", price: "$75.00", matchScore: "94% Match", category: "Shoes", tags: ["Slip-on", "Office"] },
+      { title: "Classic Dress Brogues", price: "$95.00", matchScore: "91% Match", category: "Shoes", tags: ["Brogue", "Cushioned"] }
     ]
   },
   [PRESET_QUERIES.hoodie]: {
     detected: { category: "Hoodie / Apparel", color: "Blue", intent: "Winter / Insulated", budget: "Any" },
     products: [
-      { title: "Alpine Thermal Hoodie", price: "$68.00", image: "👕", matchScore: "99% Match", category: "Hoodie", tags: ["Thermal", "Sherpa Lining"] },
-      { title: "Polar Tech Sweatshirt", price: "$85.00", image: "🧥", matchScore: "95% Match", category: "Hoodie", tags: ["Fleece", "Warm"] },
-      { title: "Classic Cozy Pullover", price: "$59.00", image: "👕", matchScore: "92% Match", category: "Hoodie", tags: ["Pullover", "Soft Cotton"] }
+      { title: "Alpine Thermal Hoodie", price: "$68.00", matchScore: "99% Match", category: "Hoodie", tags: ["Thermal", "Sherpa Lining"] },
+      { title: "Polar Tech Sweatshirt", price: "$85.00", matchScore: "95% Match", category: "Hoodie", tags: ["Fleece", "Warm"] },
+      { title: "Classic Cozy Pullover", price: "$59.00", matchScore: "92% Match", category: "Hoodie", tags: ["Pullover", "Soft Cotton"] }
     ]
   }
 };
@@ -387,7 +390,11 @@ export const LandingPage: React.FC = () => {
                   {DEMO_PRODUCTS[heroSearchVal]?.products.map((prod, index) => (
                     <div key={index} className="bg-white border border-neutral-lightgray/80 rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                       <div>
-                        <div className="text-2xl mb-2">{prod.image}</div>
+                        <div className="mb-2 text-brand">
+                          {prod.category === 'Shoes'
+                            ? <Footprints className="h-6 w-6" aria-hidden="true" />
+                            : <Shirt className="h-6 w-6" aria-hidden="true" />}
+                        </div>
                         <div className="text-xs font-bold text-neutral-charcoal line-clamp-1">{prod.title}</div>
                         <div className="text-[10px] text-neutral-mediumgray font-semibold mt-0.5">{prod.category}</div>
                       </div>
@@ -546,15 +553,15 @@ export const LandingPage: React.FC = () => {
                     <div className="space-y-2">
                       <div className="text-xs font-bold text-neutral-mediumgray uppercase tracking-wider">Search logs:</div>
                       <div className="bg-red-50/50 border border-red-100 rounded-xl p-3.5 text-xs text-red-800 font-semibold space-y-1.5">
-                        <div>⚠️ SQL match fails for keyword: 'cheap'</div>
-                        <div>⚠️ cos_similarity not supported. Skipping semantic check...</div>
+                        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> SQL match fails for keyword: 'cheap'</div>
+                        <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> cos_similarity not supported. Skipping semantic check...</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white border border-neutral-lightgray/85 rounded-2xl p-6 text-center text-xs text-neutral-mediumgray font-medium mt-8 py-10">
-                  ❌ No matching products found for "cheap"
+                  <span className="inline-flex items-center justify-center gap-2"><XCircle className="h-4 w-4 text-red-500" /> No matching products found for "cheap"</span>
                 </div>
               </div>
 
@@ -579,8 +586,8 @@ export const LandingPage: React.FC = () => {
                     <div className="space-y-2">
                       <div className="text-xs font-bold text-neutral-mediumgray uppercase tracking-wider">Velt pipeline logs:</div>
                       <div className="bg-neutral-background border border-neutral-lightgray/85 rounded-xl p-3.5 text-xs space-y-1.5 font-semibold text-neutral-darkgray">
-                        <div className="flex items-center gap-1.5 text-brand"><Check className="w-3.5 h-3.5" /> Parsed: Activity ➔ Running</div>
-                        <div className="flex items-center gap-1.5 text-brand"><Check className="w-3.5 h-3.5" /> Price condition matched: cheap ➔ &lt; $50</div>
+                        <div className="flex items-center gap-1.5 text-brand"><Check className="w-3.5 h-3.5" /> Parsed: Activity <ArrowRight className="h-3 w-3" /> Running</div>
+                        <div className="flex items-center gap-1.5 text-brand"><Check className="w-3.5 h-3.5" /> Price condition matched: cheap <ArrowRight className="h-3 w-3" /> &lt; $50</div>
                         <div className="flex items-center gap-1.5 text-brand"><Check className="w-3.5 h-3.5" /> Embedding similarity search returned 3 items</div>
                       </div>
                     </div>
@@ -590,7 +597,7 @@ export const LandingPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 mt-8">
                   <div className="bg-neutral-background border border-neutral-lightgray/80 rounded-xl p-3.5 flex flex-col justify-between">
                     <div>
-                      <span className="text-lg">👟</span>
+                      <Footprints className="h-5 w-5 text-brand" aria-hidden="true" />
                       <div className="text-xs font-bold text-neutral-charcoal mt-1 truncate">Road Runner Pro</div>
                       <span className="text-[10px] text-neutral-mediumgray">Shoes</span>
                     </div>
@@ -601,7 +608,7 @@ export const LandingPage: React.FC = () => {
                   </div>
                   <div className="bg-neutral-background border border-neutral-lightgray/80 rounded-xl p-3.5 flex flex-col justify-between">
                     <div>
-                      <span className="text-lg">👟</span>
+                      <Footprints className="h-5 w-5 text-brand" aria-hidden="true" />
                       <div className="text-xs font-bold text-neutral-charcoal mt-1 truncate">Trail Lite Jogger</div>
                       <span className="text-[10px] text-neutral-mediumgray">Shoes</span>
                     </div>
@@ -903,14 +910,14 @@ export const LandingPage: React.FC = () => {
                     <span className="font-semibold text-neutral-darkgray">"heavy metal gold ring size 7"</span>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-brand uppercase">Cosine Sim: 0.94</span>
-                      <span className="font-bold text-green-700">✓ Clicked</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-green-700"><Check className="h-3.5 w-3.5" /> Clicked</span>
                     </div>
                   </div>
                   <div className="flex justify-between items-center bg-white border border-neutral-lightgray/70 p-3 rounded-xl">
                     <span className="font-semibold text-neutral-darkgray">"waterproof boots for snow hiking"</span>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-brand uppercase">Cosine Sim: 0.89</span>
-                      <span className="font-bold text-green-700">✓ Clicked</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-green-700"><Check className="h-3.5 w-3.5" /> Clicked</span>
                     </div>
                   </div>
                 </div>

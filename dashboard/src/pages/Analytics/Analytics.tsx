@@ -6,7 +6,7 @@ import type { StoreModel } from '../Stores/StoreList';
 import { 
   BarChart3, Search, MousePointerClick, AlertTriangle, 
   RefreshCw, Calendar, AlertCircle, Sparkles, ArrowLeft,
-  Zap, Lightbulb
+  Zap, Lightbulb, CheckCircle2
 } from 'lucide-react';
 
 interface AnalyticsData {
@@ -338,8 +338,9 @@ export const Analytics: React.FC = () => {
               </h2>
               
               {(!data.queries_without_results || data.queries_without_results.length === 0) ? (
-                <div className="text-center py-8 text-xs text-neutral-mediumgray">
-                  🎉 Good news! No failed search terms recorded this week.
+                <div className="flex flex-col items-center justify-center gap-2 text-center py-8 text-xs text-neutral-mediumgray">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-500" aria-hidden="true" />
+                  <span>Good news! No failed search terms recorded this week.</span>
                 </div>
               ) : (
                 <div className="space-y-2">
